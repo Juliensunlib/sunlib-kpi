@@ -9,8 +9,14 @@ interface Props {
 }
 
 export default function KPICard({ label, value, unit = '', icon, sub, decimals = 0, currency = false }: Props) {
+  // Formatage précis : jamais de notation compacte, centimes affichés pour les euros
   const display = currency
-    ? new Intl.NumberFormat('fr-FR', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 }).format(value)
+    ? new Intl.NumberFormat('fr-FR', {
+        style: 'currency',
+        currency: 'EUR',
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2,
+      }).format(value)
     : `${value.toFixed(decimals)}${unit}`
 
   return (
@@ -19,7 +25,7 @@ export default function KPICard({ label, value, unit = '', icon, sub, decimals =
         <p className="kpi-label">{label}</p>
         {icon && <span className="text-base">{icon}</span>}
       </div>
-      <p className="kpi-value">{display}</p>
+      <p className="kpi-value text-lg">{display}</p>
       {sub && <p className="kpi-sub">{sub}</p>}
     </div>
   )
