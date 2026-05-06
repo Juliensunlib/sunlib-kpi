@@ -15,7 +15,7 @@ export default function KPICard({
     ? new Intl.NumberFormat('fr-FR', {
         style: 'currency',
         currency: 'EUR',
-        maximumFractionDigits: 0,  // Pas de centimes dans les cards
+        maximumFractionDigits: 0,
         minimumFractionDigits: 0,
       }).format(value)
     : `${value.toFixed(decimals)}${unit}`
