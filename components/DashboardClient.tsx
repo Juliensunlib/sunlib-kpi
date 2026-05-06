@@ -32,16 +32,16 @@ function StatBar({ title, data, total }: { title: string; data: Record<string, n
 }
 
 export default function DashboardClient() {
-  const [data, setData]         = useState<KPIData | null>(null)
-  const [loading, setLoading]   = useState(true)
-  const [error, setError]       = useState<string | null>(null)
-  const [segment, setSegment]   = useState<Segment>('Tous')
+  const [data, setData]               = useState<KPIData | null>(null)
+  const [loading, setLoading]         = useState(true)
+  const [error, setError]             = useState<string | null>(null)
+  const [segment, setSegment]         = useState<Segment>('Tous')
   const [typeInstall, setTypeInstall] = useState<TypeInstall>('Tous')
-  const [annee, setAnnee]       = useState('')
-  const [tab, setTab]           = useState<TabId>('signes')
-  const [showLog, setShowLog]   = useState(false)
-  const [log, setLog]           = useState<Array<{ date: string; entries: ChangeEntry[] }>>([])
-  const [refreshing, setRefreshing] = useState(false)
+  const [annee, setAnnee]             = useState('')
+  const [tab, setTab]                 = useState<TabId>('signes')
+  const [showLog, setShowLog]         = useState(false)
+  const [log, setLog]                 = useState<Array<{ date: string; entries: ChangeEntry[] }>>([])
+  const [refreshing, setRefreshing]   = useState(false)
 
   const load = useCallback(async (seg: Segment, ti: TypeInstall, yr: string) => {
     setLoading(true)
@@ -59,10 +59,8 @@ export default function DashboardClient() {
     setLoading(false)
   }, [])
 
-  // Chargement initial
   useEffect(() => { load('Tous', 'Tous', '') }, [load])
 
-  // Charger le changelog
   useEffect(() => {
     fetch('/api/snapshot')
       .then(r => r.json())
@@ -100,12 +98,11 @@ export default function DashboardClient() {
     { id: 'duree_f2', label: '⏱️ Durée F2' },
   ]
 
-  const g = data?.global
+  const g       = data?.global
   const monthly = data?.monthly || []
 
   return (
     <div className="min-h-screen bg-gray-50">
-      {/* Header */}
       <header className="bg-white border-b border-gray-200 sticky top-0 z-10">
         <div className="max-w-screen-2xl mx-auto px-4 py-3 flex items-center gap-3 flex-wrap">
           <div className="flex items-center gap-2 mr-2">
@@ -116,7 +113,6 @@ export default function DashboardClient() {
             </div>
             <span className="font-semibold text-gray-900 text-sm">SunLib KPIs</span>
           </div>
-
           <div className="flex items-center gap-2 flex-1 flex-wrap">
             <select value={segment} onChange={e => applyFilter(e.target.value as Segment, typeInstall, annee)}
               className="text-sm border border-gray-200 rounded-lg px-3 py-1.5 bg-white">
@@ -140,15 +136,20 @@ export default function DashboardClient() {
               <option value="2026">2026</option>
             </select>
           </div>
-
           <div className="flex items-center gap-2">
-            {data && <span className="text-xs text-gray-400 hidden sm:block">
-              {data.total_records} records · {new Date(data.last_updated).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}
-            </span>}
+            {data && (
+              <span className="text-xs text-gray-400 hidden sm:block">
+                {data.total_records} records · {new Date(data.last_updated).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}
+              </span>
+            )}
             <button onClick={() => setShowLog(!showLog)}
               className="relative text-sm px-3 py-1.5 border border-gray-200 rounded-lg hover:bg-gray-50">
               📋 Journal
-              {log.length > 0 && <span className="absolute -top-1 -right-1 bg-amber-500 text-white text-xs w-4 h-4 rounded-full flex items-center justify-center">{Math.min(log.length, 9)}</span>}
+              {log.length > 0 && (
+                <span className="absolute -top-1 -right-1 bg-amber-500 text-white text-xs w-4 h-4 rounded-full flex items-center justify-center">
+                  {Math.min(log.length, 9)}
+                </span>
+              )}
             </button>
             <button onClick={snapshot} disabled={refreshing}
               className="text-sm px-3 py-1.5 border border-gray-200 rounded-lg hover:bg-gray-50 disabled:opacity-50">
@@ -160,41 +161,34 @@ export default function DashboardClient() {
       </header>
 
       <main className="max-w-screen-2xl mx-auto px-4 py-5">
-        {/* États de chargement / erreur */}
         {loading && (
-          <div className="flex items-center justify-center py-20">
+          <div className="flex items-center justify-center py-24">
             <div className="text-center">
-              <div className="w-8 h-8 border-2 border-amber-500 border-t-transparent rounded-full animate-spin mx-auto mb-3"></div>
+              <div className="w-8 h-8 border-2 border-amber-500 border-t-transparent rounded-full animate-spin mx-auto mb-3" />
               <p className="text-sm text-gray-500">Chargement des données Airtable…</p>
             </div>
           </div>
         )}
-
         {error && (
           <div className="bg-red-50 border border-red-200 rounded-xl p-5 mb-5">
             <p className="font-semibold text-red-800 mb-1">Erreur de chargement</p>
             <pre className="text-sm text-red-700 whitespace-pre-wrap break-all">{error}</pre>
-            <p className="text-xs text-red-500 mt-2">Vérifier AIRTABLE_API_KEY dans Vercel → Settings → Environment Variables</p>
           </div>
         )}
-
         {!loading && !error && g && (
           <>
-            {/* KPI Cards */}
             <div className="grid grid-cols-2 sm:grid-cols-4 xl:grid-cols-8 gap-3 mb-5">
-              <KPICard label="Contrats signés"     value={g.total_signes}      icon="📝" />
-              <KPICard label="Poses réalisées"      value={g.total_poses}       icon="🔧"
+              <KPICard label="Contrats signés"    value={g.total_signes}      icon="📝" />
+              <KPICard label="Poses réalisées"     value={g.total_poses}       icon="🔧"
                 sub={`${Math.round(g.total_poses / Math.max(g.total_signes, 1) * 100)}% taux pose`} />
-              <KPICard label="kWc signés"           value={g.total_kwc}         unit=" kWc" icon="⚡" decimals={1} />
-              <KPICard label="CAPEX engagé"         value={g.total_capex_ht}    icon="💶" currency />
-              <KPICard label="Abo. moyen"           value={g.moy_abonnement}    unit=" €/mois" icon="💰" />
-              <KPICard label="Durée moy. contrat"   value={g.moy_duree_contrat} unit=" ans" icon="📅" decimals={1} />
-              <KPICard label="Durée moy. F2"        value={g.moy_duree_f2}      unit=" j" icon="⏱️" sub="Sig. → Pose validée" />
-              <KPICard label="Mandats SEPA"         value={g.mandats_signes}    unit={`/${g.mandats_total}`} icon="🏦"
+              <KPICard label="kWc signés"          value={g.total_kwc}         unit=" kWc" icon="⚡" decimals={1} />
+              <KPICard label="CAPEX engagé"        value={g.total_capex_ht}    icon="💶" currency />
+              <KPICard label="Abo. moyen"          value={g.moy_abonnement}    unit=" €/mois" icon="💰" />
+              <KPICard label="Durée moy. contrat"  value={g.moy_duree_contrat} unit=" ans" icon="📅" decimals={1} />
+              <KPICard label="Durée moy. F2"       value={g.moy_duree_f2}      unit=" j" icon="⏱️" sub="Sig. → Pose validée" />
+              <KPICard label="Mandats SEPA"        value={g.mandats_signes}    unit={`/${g.mandats_total}`} icon="🏦"
                 sub={`${Math.round(g.mandats_signes / Math.max(g.mandats_total, 1) * 100)}% signés`} />
             </div>
-
-            {/* Graphiques */}
             <div className="bg-white rounded-xl border border-gray-100 shadow-sm mb-4">
               <div className="border-b border-gray-100 flex overflow-x-auto">
                 {tabs.map(t => (
@@ -213,18 +207,15 @@ export default function DashboardClient() {
                 }
               </div>
             </div>
-
-            {/* Répartitions */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <StatBar title="Répartition segment"  data={g.par_segment}      total={g.total_signes} />
               <StatBar title="Type d'installation"  data={g.par_type_install} total={g.total_signes} />
-              <StatBar title="Statut dossiers"      data={g.par_statut}       total={Object.values(g.par_statut).reduce((a,b)=>a+b,0)} />
+              <StatBar title="Statut dossiers"      data={g.par_statut}       total={Object.values(g.par_statut).reduce((a, b) => a + b, 0)} />
             </div>
           </>
         )}
       </main>
 
-      {/* Panneau changelog */}
       {showLog && (
         <div className="fixed inset-y-0 right-0 w-96 max-w-full bg-white border-l border-gray-200 shadow-xl z-20 flex flex-col">
           <div className="flex items-center justify-between p-4 border-b">
