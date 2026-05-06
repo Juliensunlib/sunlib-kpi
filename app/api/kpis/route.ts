@@ -3,7 +3,7 @@ import { NextRequest, NextResponse } from 'next/server'
 export const dynamic = 'force-dynamic'
 
 function str(v: unknown): string {
-  if (!v && v !== 0) return ''
+  if (v === null || v === undefined || v === false) return ''
   if (typeof v === 'string') return v
   if (typeof v === 'number') return String(v)
   if (typeof v === 'object') {
@@ -36,23 +36,34 @@ function label(ym: string): string {
 }
 
 const F = {
-  SEGMENT:           'fld3SpiGzcJrADLgL',
-  MOIS_SIGNATURE:    'fldk94N7n4aQW482K',
-  DATE_SIGNATURE:    'fldNyXyZv7xsbpVaV',
-  CONTRAT_SIGNE:     'fldcThGrSIaaAVbew',
-  ETAT_F2:           'fldFbme1enY3VGb40',
-  ETAT_F3:           'fldDZe4wp4DTRHIzC',
-  DUREE_F2_J:        'fldzMJMqnDQ5eNRUo',
-  KWC:               'fldTJkt211i53Ktmy',
-  CAPEX_HT:          'fldtX7I9xNCHY4BTw',
-  ABONNEMENT_KPI:    'fldBm8DaWTWaH7Ccs',
-  DUREE_CONTRAT_KPI: 'fldNyoThqq9xETowk',
-  TYPE_INSTALLATION: 'fldKXJ0epXcIMopFd',
-  STATUT_DOSSIER:    'fldXvGXjjI0yM1BtU',
-  MANDAT_SIGNE:      'fldRCJqecLekhDE3s',
+  SEGMENT:            'fld3SpiGzcJrADLgL',
+  MOIS_SIGNATURE:     'fldk94N7n4aQW482K',
+  DATE_SIGNATURE:     'fldNyXyZv7xsbpVaV',
+  // Contrat signé = "Contrat abonnement signe" non vide (pièces jointes)
+  CONTRAT_ATTACHMENT: 'fldh1l1uImywSLf8a',
+  // Exclusion annulés = "Statut de l'abonné" != "Annulé"
+  STATUT_ABONNE:      'fldNBDnMAaxdSXEvR',
+  ETAT_F2:            'fldFbme1enY3VGb40',
+  ETAT_F3:            'fldDZe4wp4DTRHIzC',
+  DUREE_F2_J:         'fldzMJMqnDQ5eNRUo',
+  KWC:                'fldTJkt211i53Ktmy',
+  CAPEX_HT:           'fldtX7I9xNCHY4BTw',
+  ABONNEMENT_KPI:     'fldBm8DaWTWaH7Ccs',
+  DUREE_CONTRAT_KPI:  'fldNyoThqq9xETowk',
+  TYPE_INSTALLATION:  'fldKXJ0epXcIMopFd',
+  STATUT_DOSSIER:     'fldXvGXjjI0yM1BtU',
+  MANDAT_SIGNE:       'fldRCJqecLekhDE3s',
 }
 
 type Rec = { id: string; fields: Record<string, unknown> }
+
+// Critère "contrat signé" : fichier joint + pas annulé
+function isSigne(f: Record<string, unknown>): boolean {
+  const att = f[F.CONTRAT_ATTACHMENT]
+  const hasFile = Array.isArray(att) && att.length > 0
+  const statut = str(f[F.STATUT_ABONNE])
+  return hasFile && statut !== 'Annulé'
+}
 
 async function fetchAll(): Promise<Rec[]> {
   const base  = process.env.AIRTABLE_BASE_ID!
@@ -62,7 +73,6 @@ async function fetchAll(): Promise<Rec[]> {
   const all: Rec[] = []
   let offset: string | undefined
   do {
-    // returnFieldsByFieldId=true → les clés de fields sont les IDs (fldXXX) et non les noms
     const url = `https://api.airtable.com/v0/${base}/${table}?pageSize=100&returnFieldsByFieldId=true&${fqs}${offset ? `&offset=${offset}` : ''}`
     const res = await fetch(url, {
       headers: { Authorization: `Bearer ${key}` },
@@ -85,6 +95,7 @@ export async function GET(req: NextRequest) {
 
     const records = await fetchAll()
 
+    // Filtrage global (segment / type install / année)
     const filtered = records.filter(r => {
       if (segment !== 'Tous' && str(r.fields[F.SEGMENT]) !== segment) return false
       if (typeInstall !== 'Tous' && str(r.fields[F.TYPE_INSTALLATION]) !== typeInstall) return false
@@ -92,6 +103,7 @@ export async function GET(req: NextRequest) {
       return true
     })
 
+    // Agrégation par mois
     const byMonth = new Map<string, { signes: Rec[]; poses: Rec[]; f3: Rec[] }>()
     const ensure  = (m: string) => {
       if (!byMonth.has(m)) byMonth.set(m, { signes: [], poses: [], f3: [] })
@@ -105,9 +117,12 @@ export async function GET(req: NextRequest) {
       const etatF3  = str(f[F.ETAT_F3])
       const dureeF2 = num(f[F.DUREE_F2_J])
 
-      if (bool(f[F.CONTRAT_SIGNE]) && moisSig) {
+      // Contrats signés → mois de signature
+      if (isSigne(f) && moisSig) {
         ensure(moisSig).signes.push(r)
       }
+
+      // Poses F2 validées → mois de pose estimé
       if (etatF2 === 'Validée' && dureeF2 > 0 && moisSig) {
         let moisPose = moisSig
         const ds = str(f[F.DATE_SIGNATURE])
@@ -120,6 +135,8 @@ export async function GET(req: NextRequest) {
         }
         ensure(moisPose).poses.push(r)
       }
+
+      // F3 validées
       if (etatF3 === 'Validée' && moisSig) {
         ensure(moisSig).f3.push(r)
       }
@@ -147,7 +164,7 @@ export async function GET(req: NextRequest) {
       }
     })
 
-    const allSignes = filtered.filter(r => bool(r.fields[F.CONTRAT_SIGNE]))
+    const allSignes = filtered.filter(r => isSigne(r.fields))
     const allPoses  = filtered.filter(r => str(r.fields[F.ETAT_F2]) === 'Validée' && num(r.fields[F.DUREE_F2_J]) > 0)
 
     const par_segment:      Record<string, number> = {}
