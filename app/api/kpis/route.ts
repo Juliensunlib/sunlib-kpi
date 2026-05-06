@@ -39,9 +39,7 @@ const F = {
   SEGMENT:            'fld3SpiGzcJrADLgL',
   MOIS_SIGNATURE:     'fldk94N7n4aQW482K',
   DATE_SIGNATURE:     'fldNyXyZv7xsbpVaV',
-  // Contrat signé = "Contrat abonnement signe" non vide (pièces jointes)
   CONTRAT_ATTACHMENT: 'fldh1l1uImywSLf8a',
-  // Exclusion annulés = "Statut de l'abonné" != "Annulé"
   STATUT_ABONNE:      'fldNBDnMAaxdSXEvR',
   ETAT_F2:            'fldFbme1enY3VGb40',
   ETAT_F3:            'fldDZe4wp4DTRHIzC',
@@ -57,7 +55,6 @@ const F = {
 
 type Rec = { id: string; fields: Record<string, unknown> }
 
-// Critère "contrat signé" : fichier joint + pas annulé
 function isSigne(f: Record<string, unknown>): boolean {
   const att = f[F.CONTRAT_ATTACHMENT]
   const hasFile = Array.isArray(att) && att.length > 0
@@ -74,10 +71,7 @@ async function fetchAll(): Promise<Rec[]> {
   let offset: string | undefined
   do {
     const url = `https://api.airtable.com/v0/${base}/${table}?pageSize=100&returnFieldsByFieldId=true&${fqs}${offset ? `&offset=${offset}` : ''}`
-    const res = await fetch(url, {
-      headers: { Authorization: `Bearer ${key}` },
-      cache: 'no-store',
-    })
+    const res = await fetch(url, { headers: { Authorization: `Bearer ${key}` }, cache: 'no-store' })
     if (!res.ok) throw new Error(`Airtable ${res.status}: ${await res.text()}`)
     const d = await res.json() as { records: Rec[]; offset?: string }
     all.push(...d.records)
@@ -95,7 +89,6 @@ export async function GET(req: NextRequest) {
 
     const records = await fetchAll()
 
-    // Filtrage global (segment / type install / année)
     const filtered = records.filter(r => {
       if (segment !== 'Tous' && str(r.fields[F.SEGMENT]) !== segment) return false
       if (typeInstall !== 'Tous' && str(r.fields[F.TYPE_INSTALLATION]) !== typeInstall) return false
@@ -103,7 +96,6 @@ export async function GET(req: NextRequest) {
       return true
     })
 
-    // Agrégation par mois
     const byMonth = new Map<string, { signes: Rec[]; poses: Rec[]; f3: Rec[] }>()
     const ensure  = (m: string) => {
       if (!byMonth.has(m)) byMonth.set(m, { signes: [], poses: [], f3: [] })
@@ -117,16 +109,14 @@ export async function GET(req: NextRequest) {
       const etatF3  = str(f[F.ETAT_F3])
       const dureeF2 = num(f[F.DUREE_F2_J])
 
-      // Contrats signés → mois de signature
       if (isSigne(f) && moisSig) {
         ensure(moisSig).signes.push(r)
       }
 
-      // Poses F2 validées → mois de pose estimé
-      if (etatF2 === 'Validée' && dureeF2 > 0 && moisSig) {
+      if (etatF2 === 'Validée' && moisSig) {
         let moisPose = moisSig
         const ds = str(f[F.DATE_SIGNATURE])
-        if (ds) {
+        if (ds && dureeF2 > 0) {
           const d = new Date(ds)
           if (!isNaN(d.getTime())) {
             d.setDate(d.getDate() + dureeF2)
@@ -136,7 +126,6 @@ export async function GET(req: NextRequest) {
         ensure(moisPose).poses.push(r)
       }
 
-      // F3 validées
       if (etatF3 === 'Validée' && moisSig) {
         ensure(moisSig).f3.push(r)
       }
@@ -151,21 +140,24 @@ export async function GET(req: NextRequest) {
         nb_signes:         signes.length,
         nb_signes_pro:     signes.filter(isPro).length,
         nb_signes_part:    signes.filter(r => !isPro(r)).length,
-        kwc_signes:        Math.round(signes.reduce((s, r) => s + num(r.fields[F.KWC]), 0) * 10) / 10,
-        capex_ht:          Math.round(signes.reduce((s, r) => s + num(r.fields[F.CAPEX_HT]), 0)),
-        moy_abonnement:    Math.round(avg(signes.map(r => num(r.fields[F.ABONNEMENT_KPI])).filter(v => v > 0))),
-        moy_duree_contrat: Math.round(avg(signes.map(r => num(r.fields[F.DUREE_CONTRAT_KPI])).filter(v => v > 0)) * 10) / 10,
+        kwc_signes:        signes.reduce((s, r) => s + num(r.fields[F.KWC]), 0),
+        // CAPEX signé = valeur exacte sans arrondi
+        capex_ht_signes:   signes.reduce((s, r) => s + num(r.fields[F.CAPEX_HT]), 0),
+        moy_abonnement:    avg(signes.map(r => num(r.fields[F.ABONNEMENT_KPI])).filter(v => v > 0)),
+        moy_duree_contrat: avg(signes.map(r => num(r.fields[F.DUREE_CONTRAT_KPI])).filter(v => v > 0)),
         nb_poses:          poses.length,
         nb_poses_pro:      poses.filter(isPro).length,
         nb_poses_part:     poses.filter(r => !isPro(r)).length,
-        kwc_poses:         Math.round(poses.reduce((s, r) => s + num(r.fields[F.KWC]), 0) * 10) / 10,
-        moy_duree_f2:      Math.round(avg(poses.map(r => num(r.fields[F.DUREE_F2_J])).filter(v => v > 0))),
+        kwc_poses:         poses.reduce((s, r) => s + num(r.fields[F.KWC]), 0),
+        // CAPEX posé = valeur exacte sans arrondi
+        capex_ht_poses:    poses.reduce((s, r) => s + num(r.fields[F.CAPEX_HT]), 0),
+        moy_duree_f2:      avg(poses.map(r => num(r.fields[F.DUREE_F2_J])).filter(v => v > 0)),
         nb_f3:             f3.length,
       }
     })
 
     const allSignes = filtered.filter(r => isSigne(r.fields))
-    const allPoses  = filtered.filter(r => str(r.fields[F.ETAT_F2]) === 'Validée' && num(r.fields[F.DUREE_F2_J]) > 0)
+    const allPoses  = filtered.filter(r => str(r.fields[F.ETAT_F2]) === 'Validée')
 
     const par_segment:      Record<string, number> = {}
     const par_type_install: Record<string, number> = {}
@@ -182,15 +174,18 @@ export async function GET(req: NextRequest) {
 
     return NextResponse.json({
       global: {
-        total_signes:      allSignes.length,
-        total_kwc:         Math.round(allSignes.reduce((s, r) => s + num(r.fields[F.KWC]), 0) * 10) / 10,
-        total_capex_ht:    Math.round(allSignes.reduce((s, r) => s + num(r.fields[F.CAPEX_HT]), 0)),
-        total_poses:       allPoses.length,
-        moy_abonnement:    Math.round(avg(allSignes.map(r => num(r.fields[F.ABONNEMENT_KPI])).filter(v => v > 0))),
-        moy_duree_contrat: Math.round(avg(allSignes.map(r => num(r.fields[F.DUREE_CONTRAT_KPI])).filter(v => v > 0)) * 10) / 10,
-        moy_duree_f2:      Math.round(avg(allPoses.map(r => num(r.fields[F.DUREE_F2_J])).filter(v => v > 0))),
-        mandats_signes:    allSignes.filter(r => bool(r.fields[F.MANDAT_SIGNE])).length,
-        mandats_total:     allSignes.length,
+        total_signes:       allSignes.length,
+        total_kwc_signes:   allSignes.reduce((s, r) => s + num(r.fields[F.KWC]), 0),
+        // Valeurs exactes sans arrondi
+        total_capex_signes: allSignes.reduce((s, r) => s + num(r.fields[F.CAPEX_HT]), 0),
+        total_poses:        allPoses.length,
+        total_kwc_poses:    allPoses.reduce((s, r) => s + num(r.fields[F.KWC]), 0),
+        total_capex_poses:  allPoses.reduce((s, r) => s + num(r.fields[F.CAPEX_HT]), 0),
+        moy_abonnement:     avg(allSignes.map(r => num(r.fields[F.ABONNEMENT_KPI])).filter(v => v > 0)),
+        moy_duree_contrat:  avg(allSignes.map(r => num(r.fields[F.DUREE_CONTRAT_KPI])).filter(v => v > 0)),
+        moy_duree_f2:       avg(allPoses.map(r => num(r.fields[F.DUREE_F2_J])).filter(v => v > 0)),
+        mandats_signes:     allSignes.filter(r => bool(r.fields[F.MANDAT_SIGNE])).length,
+        mandats_total:      allSignes.length,
         par_segment, par_type_install, par_statut,
       },
       monthly,
