@@ -1,0 +1,26 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --sunlib-blue: #1a5276;
+  --sunlib-orange: #e67e22;
+}
+
+body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; }
+
+.kpi-card {
+  @apply bg-white rounded-xl border border-gray-100 p-5 shadow-sm;
+}
+.kpi-label {
+  @apply text-xs font-medium text-gray-500 uppercase tracking-wider mb-1;
+}
+.kpi-value {
+  @apply text-2xl font-semibold text-gray-900;
+}
+.kpi-sub {
+  @apply text-xs text-gray-400 mt-1;
+}
+.delta-up   { @apply text-emerald-600; }
+.delta-down { @apply text-red-500; }
+.delta-flat { @apply text-gray-400; }
