@@ -29,20 +29,24 @@ export interface RawRecord {
   fields: Record<string, unknown>
 }
 
-// Gère les deux formats : string directe (REST API) ou objet {name} (MCP)
+// Gère tous les formats : string, objet {name}, erreur Airtable {error:"#ERROR!"}
 export function fieldStr(v: unknown): string {
   if (v === null || v === undefined || v === false) return ''
   if (typeof v === 'string') return v
   if (typeof v === 'number') return String(v)
+  if (typeof v === 'boolean') return v ? 'true' : ''
   if (typeof v === 'object') {
     const o = v as Record<string, unknown>
+    // Erreur Airtable ex: {"error":"#ERROR!"} → on ignore
+    if ('error' in o) return ''
     if ('name' in o && o.name != null) return String(o.name)
     if ('text' in o && o.text != null) return String(o.text)
   }
-  return String(v)
+  return ''
 }
 
 export function fieldNum(v: unknown): number {
+  if (typeof v === 'object' && v !== null && 'error' in (v as object)) return 0
   const n = Number(v)
   return isFinite(n) ? n : 0
 }
@@ -55,7 +59,9 @@ export async function fetchAllAbonnes(): Promise<RawRecord[]> {
   const base  = process.env.AIRTABLE_BASE_ID
   const table = process.env.AIRTABLE_ABONNES_TABLE
   const key   = process.env.AIRTABLE_API_KEY
-  if (!base || !table || !key) throw new Error('Variables AIRTABLE manquantes dans Vercel env vars.')
+  if (!base || !table || !key) {
+    throw new Error(`Variables manquantes: BASE=${!!base} TABLE=${!!table} KEY=${!!key}`)
+  }
 
   const fieldsQS = ALL_FIELD_IDS.map(f => `fields[]=${encodeURIComponent(f)}`).join('&')
   const records: RawRecord[] = []
