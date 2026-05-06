@@ -30,11 +30,10 @@ interface KPIData {
   last_updated: string
 }
 
-// ─── Helpers ─────────────────────────────────────────────────────────────────
 const fmtEur = (v: number) =>
   new Intl.NumberFormat('fr-FR', {
     style: 'currency', currency: 'EUR',
-    minimumFractionDigits: 2, maximumFractionDigits: 2,
+    maximumFractionDigits: 0, minimumFractionDigits: 0,
   }).format(v)
 
 function KPICard({ label, value, icon, sub, unit = '', decimals = 0, currency = false }: {
@@ -48,7 +47,7 @@ function KPICard({ label, value, icon, sub, unit = '', decimals = 0, currency = 
         <p className="kpi-label">{label}</p>
         {icon && <span className="text-base">{icon}</span>}
       </div>
-      <p className="kpi-value text-base font-semibold break-all">{display}</p>
+      <p className="kpi-value">{display}</p>
       {sub && <p className="kpi-sub">{sub}</p>}
     </div>
   )
@@ -83,7 +82,6 @@ function StatBar({ title, data, total }: {
   )
 }
 
-// ─── Dashboard principal ──────────────────────────────────────────────────────
 export default function DashboardClient() {
   const [data, setData]               = useState<KPIData | null>(null)
   const [loading, setLoading]         = useState(true)
@@ -141,16 +139,17 @@ export default function DashboardClient() {
   }
 
   const tabs: { id: TabId; label: string }[] = [
-    { id: 'signes',      label: '📝 Contrats signés' },
-    { id: 'poses',       label: '🔧 Poses (F2)' },
+    { id: 'signes',       label: '📝 Contrats signés' },
+    { id: 'poses',        label: '🔧 Poses (F2)' },
     { id: 'capex_signes', label: '💶 CAPEX signé' },
     { id: 'capex_poses',  label: '💰 CAPEX posé' },
-    { id: 'kwc',         label: '⚡ kWc' },
-    { id: 'duree_f2',    label: '⏱️ Durée F2' },
+    { id: 'kwc',          label: '⚡ kWc' },
+    { id: 'duree_f2',     label: '⏱️ Durée F2' },
   ]
 
   const g       = data?.global
-  const monthly = (data?.monthly || []) as Parameters<typeof MonthlyChart>[0]['data']
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const monthly = (data?.monthly || []) as any[]
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -167,21 +166,24 @@ export default function DashboardClient() {
           </div>
 
           <div className="flex items-center gap-2 flex-1 flex-wrap">
-            <select value={segment} onChange={e => applyFilter(e.target.value as Segment, typeInstall, annee)}
+            <select value={segment}
+              onChange={e => applyFilter(e.target.value as Segment, typeInstall, annee)}
               className="text-sm border border-gray-200 rounded-lg px-3 py-1.5 bg-white">
               <option value="Tous">Tous segments</option>
               <option value="Pro">Pro</option>
               <option value="Solo">Solo</option>
               <option value="Duo">Duo</option>
             </select>
-            <select value={typeInstall} onChange={e => applyFilter(segment, e.target.value as TypeInstall, annee)}
+            <select value={typeInstall}
+              onChange={e => applyFilter(segment, e.target.value as TypeInstall, annee)}
               className="text-sm border border-gray-200 rounded-lg px-3 py-1.5 bg-white">
               <option value="Tous">Toutes installations</option>
               <option value="PV seul">PV seul</option>
               <option value="PV + Batterie">PV + Batterie</option>
               <option value="PV + Batterie Virtuelle">PV + Batterie Virtuelle</option>
             </select>
-            <select value={annee} onChange={e => applyFilter(segment, typeInstall, e.target.value)}
+            <select value={annee}
+              onChange={e => applyFilter(segment, typeInstall, e.target.value)}
               className="text-sm border border-gray-200 rounded-lg px-3 py-1.5 bg-white">
               <option value="">Toutes années</option>
               <option value="2024">2024</option>
@@ -209,7 +211,8 @@ export default function DashboardClient() {
               className="text-sm px-3 py-1.5 border border-gray-200 rounded-lg hover:bg-gray-50 disabled:opacity-50">
               {refreshing ? '⏳' : '📸'} Snapshot
             </button>
-            <button onClick={logout} className="text-sm px-3 py-1.5 text-gray-500 hover:text-gray-700">
+            <button onClick={logout}
+              className="text-sm px-3 py-1.5 text-gray-500 hover:text-gray-700">
               Déco
             </button>
           </div>
@@ -217,6 +220,7 @@ export default function DashboardClient() {
       </header>
 
       <main className="max-w-screen-2xl mx-auto px-4 py-5">
+
         {loading && (
           <div className="flex items-center justify-center py-24">
             <div className="text-center">
@@ -235,19 +239,23 @@ export default function DashboardClient() {
 
         {!loading && !error && g && (
           <>
-            {/* KPI Cards — 8 cartes */}
-            <div className="grid grid-cols-2 sm:grid-cols-4 xl:grid-cols-8 gap-3 mb-5">
-              <KPICard label="Contrats signés"    value={g.total_signes}       icon="📝" />
-              <KPICard label="Poses réalisées"     value={g.total_poses}        icon="🔧"
+            {/* Ligne 1 : métriques volumes */}
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-3">
+              <KPICard label="Contrats signés"  value={g.total_signes}     icon="📝" />
+              <KPICard label="Poses réalisées"   value={g.total_poses}      icon="🔧"
                 sub={`${Math.round(g.total_poses / Math.max(g.total_signes, 1) * 100)}% taux pose`} />
-              <KPICard label="kWc signés"          value={g.total_kwc_signes}   unit=" kWc" icon="⚡" decimals={2} />
-              <KPICard label="CAPEX signé"         value={g.total_capex_signes} icon="💶" currency />
-              <KPICard label="CAPEX posé"          value={g.total_capex_poses}  icon="💰" currency />
-              <KPICard label="Abo. moyen"          value={g.moy_abonnement}     icon="📊" currency />
-              <KPICard label="Durée moy. F2"       value={g.moy_duree_f2}       unit=" j" icon="⏱️"
-                sub="Sig. → Pose validée" decimals={1} />
-              <KPICard label="Mandats SEPA"        value={g.mandats_signes}     unit={`/${g.mandats_total}`} icon="🏦"
+              <KPICard label="kWc signés"        value={g.total_kwc_signes} unit=" kWc" icon="⚡" decimals={2} />
+              <KPICard label="Mandats SEPA"      value={g.mandats_signes}   unit={`/${g.mandats_total}`} icon="🏦"
                 sub={`${Math.round(g.mandats_signes / Math.max(g.mandats_total, 1) * 100)}% signés`} />
+            </div>
+
+            {/* Ligne 2 : métriques financières */}
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-5">
+              <KPICard label="CAPEX signé"       value={g.total_capex_signes} icon="💶" currency />
+              <KPICard label="CAPEX posé"        value={g.total_capex_poses}  icon="💰" currency />
+              <KPICard label="Abo. moyen"        value={g.moy_abonnement}     icon="📊" currency />
+              <KPICard label="Durée moy. F2"     value={g.moy_duree_f2}       unit=" j" icon="⏱️"
+                sub="Sig. → Pose validée" decimals={1} />
             </div>
 
             {/* Graphiques */}
@@ -284,7 +292,7 @@ export default function DashboardClient() {
         )}
       </main>
 
-      {/* Panneau Journal */}
+      {/* Journal */}
       {showLog && (
         <div className="fixed inset-y-0 right-0 w-96 max-w-full bg-white border-l border-gray-200 shadow-xl z-20 flex flex-col">
           <div className="flex items-center justify-between p-4 border-b">
