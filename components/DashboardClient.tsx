@@ -1,13 +1,62 @@
 'use client'
 import { useState, useEffect, useCallback } from 'react'
-import type { KPIData, ChangeEntry, Segment, TypeInstall } from '@/lib/kpi-engine'
-import KPICard from './KPICard'
 import MonthlyChart from './MonthlyChart'
 import Changelog from './Changelog'
 
-type TabId = 'signes' | 'poses' | 'capex' | 'kwc' | 'duree_f2'
+type Segment     = 'Tous' | 'Pro' | 'Solo' | 'Duo'
+type TypeInstall = 'Tous' | 'PV seul' | 'PV + Batterie' | 'PV + Batterie Virtuelle'
+type TabId       = 'signes' | 'poses' | 'capex_signes' | 'capex_poses' | 'kwc' | 'duree_f2'
 
-function StatBar({ title, data, total }: { title: string; data: Record<string, number>; total: number }) {
+interface ChangeEntry {
+  metric: string; old_val: number | null; new_val: number
+  delta: number; delta_pct: number | null; context?: string
+}
+
+interface KPIGlobal {
+  total_signes: number; total_kwc_signes: number
+  total_capex_signes: number; total_poses: number
+  total_kwc_poses: number; total_capex_poses: number
+  moy_abonnement: number; moy_duree_contrat: number; moy_duree_f2: number
+  mandats_signes: number; mandats_total: number
+  par_segment: Record<string, number>
+  par_type_install: Record<string, number>
+  par_statut: Record<string, number>
+}
+
+interface KPIData {
+  global: KPIGlobal
+  monthly: unknown[]
+  total_records: number
+  last_updated: string
+}
+
+// ─── Helpers ─────────────────────────────────────────────────────────────────
+const fmtEur = (v: number) =>
+  new Intl.NumberFormat('fr-FR', {
+    style: 'currency', currency: 'EUR',
+    minimumFractionDigits: 2, maximumFractionDigits: 2,
+  }).format(v)
+
+function KPICard({ label, value, icon, sub, unit = '', decimals = 0, currency = false }: {
+  label: string; value: number; icon?: string; sub?: string
+  unit?: string; decimals?: number; currency?: boolean
+}) {
+  const display = currency ? fmtEur(value) : `${value.toFixed(decimals)}${unit}`
+  return (
+    <div className="kpi-card">
+      <div className="flex items-start justify-between mb-1">
+        <p className="kpi-label">{label}</p>
+        {icon && <span className="text-base">{icon}</span>}
+      </div>
+      <p className="kpi-value text-base font-semibold break-all">{display}</p>
+      {sub && <p className="kpi-sub">{sub}</p>}
+    </div>
+  )
+}
+
+function StatBar({ title, data, total }: {
+  title: string; data: Record<string, number>; total: number
+}) {
   const sorted = Object.entries(data).sort((a, b) => b[1] - a[1]).slice(0, 8)
   return (
     <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-4">
@@ -18,11 +67,14 @@ function StatBar({ title, data, total }: { title: string; data: Record<string, n
             <div className="flex justify-between text-sm mb-0.5">
               <span className="text-gray-700 truncate pr-2">{k || '—'}</span>
               <span className="font-medium text-gray-900 flex-shrink-0">
-                {v} <span className="text-gray-400 font-normal text-xs">({Math.round(v / Math.max(total, 1) * 100)}%)</span>
+                {v} <span className="text-gray-400 font-normal text-xs">
+                  ({Math.round(v / Math.max(total, 1) * 100)}%)
+                </span>
               </span>
             </div>
             <div className="h-1.5 bg-gray-100 rounded-full">
-              <div className="h-1.5 bg-amber-400 rounded-full" style={{ width: `${Math.round(v / Math.max(total, 1) * 100)}%` }} />
+              <div className="h-1.5 bg-amber-400 rounded-full"
+                style={{ width: `${Math.round(v / Math.max(total, 1) * 100)}%` }} />
             </div>
           </div>
         ))}
@@ -31,6 +83,7 @@ function StatBar({ title, data, total }: { title: string; data: Record<string, n
   )
 }
 
+// ─── Dashboard principal ──────────────────────────────────────────────────────
 export default function DashboardClient() {
   const [data, setData]               = useState<KPIData | null>(null)
   const [loading, setLoading]         = useState(true)
@@ -44,8 +97,7 @@ export default function DashboardClient() {
   const [refreshing, setRefreshing]   = useState(false)
 
   const load = useCallback(async (seg: Segment, ti: TypeInstall, yr: string) => {
-    setLoading(true)
-    setError(null)
+    setLoading(true); setError(null)
     try {
       const params = new URLSearchParams({ segment: seg, typeInstall: ti })
       if (yr) params.set('annee', yr)
@@ -53,9 +105,7 @@ export default function DashboardClient() {
       const json = await res.json()
       if (json.error) throw new Error(json.error)
       setData(json)
-    } catch (e) {
-      setError(String(e))
-    }
+    } catch (e) { setError(String(e)) }
     setLoading(false)
   }, [])
 
@@ -91,18 +141,20 @@ export default function DashboardClient() {
   }
 
   const tabs: { id: TabId; label: string }[] = [
-    { id: 'signes',   label: '📝 Contrats signés' },
-    { id: 'poses',    label: '🔧 Poses (F2)' },
-    { id: 'capex',    label: '💶 CAPEX HT' },
-    { id: 'kwc',      label: '⚡ kWc' },
-    { id: 'duree_f2', label: '⏱️ Durée F2' },
+    { id: 'signes',      label: '📝 Contrats signés' },
+    { id: 'poses',       label: '🔧 Poses (F2)' },
+    { id: 'capex_signes', label: '💶 CAPEX signé' },
+    { id: 'capex_poses',  label: '💰 CAPEX posé' },
+    { id: 'kwc',         label: '⚡ kWc' },
+    { id: 'duree_f2',    label: '⏱️ Durée F2' },
   ]
 
   const g       = data?.global
-  const monthly = data?.monthly || []
+  const monthly = (data?.monthly || []) as Parameters<typeof MonthlyChart>[0]['data']
 
   return (
     <div className="min-h-screen bg-gray-50">
+      {/* Header */}
       <header className="bg-white border-b border-gray-200 sticky top-0 z-10">
         <div className="max-w-screen-2xl mx-auto px-4 py-3 flex items-center gap-3 flex-wrap">
           <div className="flex items-center gap-2 mr-2">
@@ -113,6 +165,7 @@ export default function DashboardClient() {
             </div>
             <span className="font-semibold text-gray-900 text-sm">SunLib KPIs</span>
           </div>
+
           <div className="flex items-center gap-2 flex-1 flex-wrap">
             <select value={segment} onChange={e => applyFilter(e.target.value as Segment, typeInstall, annee)}
               className="text-sm border border-gray-200 rounded-lg px-3 py-1.5 bg-white">
@@ -136,6 +189,7 @@ export default function DashboardClient() {
               <option value="2026">2026</option>
             </select>
           </div>
+
           <div className="flex items-center gap-2">
             {data && (
               <span className="text-xs text-gray-400 hidden sm:block">
@@ -155,7 +209,9 @@ export default function DashboardClient() {
               className="text-sm px-3 py-1.5 border border-gray-200 rounded-lg hover:bg-gray-50 disabled:opacity-50">
               {refreshing ? '⏳' : '📸'} Snapshot
             </button>
-            <button onClick={logout} className="text-sm px-3 py-1.5 text-gray-500 hover:text-gray-700">Déco</button>
+            <button onClick={logout} className="text-sm px-3 py-1.5 text-gray-500 hover:text-gray-700">
+              Déco
+            </button>
           </div>
         </div>
       </header>
@@ -169,32 +225,40 @@ export default function DashboardClient() {
             </div>
           </div>
         )}
+
         {error && (
           <div className="bg-red-50 border border-red-200 rounded-xl p-5 mb-5">
             <p className="font-semibold text-red-800 mb-1">Erreur de chargement</p>
             <pre className="text-sm text-red-700 whitespace-pre-wrap break-all">{error}</pre>
           </div>
         )}
+
         {!loading && !error && g && (
           <>
+            {/* KPI Cards — 8 cartes */}
             <div className="grid grid-cols-2 sm:grid-cols-4 xl:grid-cols-8 gap-3 mb-5">
-              <KPICard label="Contrats signés"    value={g.total_signes}      icon="📝" />
-              <KPICard label="Poses réalisées"     value={g.total_poses}       icon="🔧"
+              <KPICard label="Contrats signés"    value={g.total_signes}       icon="📝" />
+              <KPICard label="Poses réalisées"     value={g.total_poses}        icon="🔧"
                 sub={`${Math.round(g.total_poses / Math.max(g.total_signes, 1) * 100)}% taux pose`} />
-              <KPICard label="kWc signés"          value={g.total_kwc}         unit=" kWc" icon="⚡" decimals={1} />
-              <KPICard label="CAPEX engagé"        value={g.total_capex_ht}    icon="💶" currency />
-              <KPICard label="Abo. moyen"          value={g.moy_abonnement}    unit=" €/mois" icon="💰" />
-              <KPICard label="Durée moy. contrat"  value={g.moy_duree_contrat} unit=" ans" icon="📅" decimals={1} />
-              <KPICard label="Durée moy. F2"       value={g.moy_duree_f2}      unit=" j" icon="⏱️" sub="Sig. → Pose validée" />
-              <KPICard label="Mandats SEPA"        value={g.mandats_signes}    unit={`/${g.mandats_total}`} icon="🏦"
+              <KPICard label="kWc signés"          value={g.total_kwc_signes}   unit=" kWc" icon="⚡" decimals={2} />
+              <KPICard label="CAPEX signé"         value={g.total_capex_signes} icon="💶" currency />
+              <KPICard label="CAPEX posé"          value={g.total_capex_poses}  icon="💰" currency />
+              <KPICard label="Abo. moyen"          value={g.moy_abonnement}     icon="📊" currency />
+              <KPICard label="Durée moy. F2"       value={g.moy_duree_f2}       unit=" j" icon="⏱️"
+                sub="Sig. → Pose validée" decimals={1} />
+              <KPICard label="Mandats SEPA"        value={g.mandats_signes}     unit={`/${g.mandats_total}`} icon="🏦"
                 sub={`${Math.round(g.mandats_signes / Math.max(g.mandats_total, 1) * 100)}% signés`} />
             </div>
+
+            {/* Graphiques */}
             <div className="bg-white rounded-xl border border-gray-100 shadow-sm mb-4">
               <div className="border-b border-gray-100 flex overflow-x-auto">
                 {tabs.map(t => (
                   <button key={t.id} onClick={() => setTab(t.id)}
                     className={`px-4 py-3 text-sm font-medium border-b-2 whitespace-nowrap transition-colors ${
-                      tab === t.id ? 'border-amber-500 text-amber-600' : 'border-transparent text-gray-500 hover:text-gray-700'
+                      tab === t.id
+                        ? 'border-amber-500 text-amber-600'
+                        : 'border-transparent text-gray-500 hover:text-gray-700'
                     }`}>
                     {t.label}
                   </button>
@@ -207,20 +271,26 @@ export default function DashboardClient() {
                 }
               </div>
             </div>
+
+            {/* Répartitions */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <StatBar title="Répartition segment"  data={g.par_segment}      total={g.total_signes} />
               <StatBar title="Type d'installation"  data={g.par_type_install} total={g.total_signes} />
-              <StatBar title="Statut dossiers"      data={g.par_statut}       total={Object.values(g.par_statut).reduce((a, b) => a + b, 0)} />
+              <StatBar title="Statut dossiers"
+                data={g.par_statut}
+                total={Object.values(g.par_statut).reduce((a, b) => a + b, 0)} />
             </div>
           </>
         )}
       </main>
 
+      {/* Panneau Journal */}
       {showLog && (
         <div className="fixed inset-y-0 right-0 w-96 max-w-full bg-white border-l border-gray-200 shadow-xl z-20 flex flex-col">
           <div className="flex items-center justify-between p-4 border-b">
             <h2 className="font-semibold text-gray-900">Journal des modifications</h2>
-            <button onClick={() => setShowLog(false)} className="text-gray-400 hover:text-gray-600 text-xl leading-none">✕</button>
+            <button onClick={() => setShowLog(false)}
+              className="text-gray-400 hover:text-gray-600 text-xl leading-none">✕</button>
           </div>
           <div className="flex-1 overflow-y-auto">
             <Changelog entries={log} />
