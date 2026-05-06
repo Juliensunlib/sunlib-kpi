@@ -1,15 +1,15 @@
 interface Props {
-  label: string
-  value: number
-  unit?: string
-  icon?: string
-  sub?: string
+  label:    string
+  value:    number
+  unit?:    string
+  icon?:    string
+  sub?:     string
   decimals?: number
-  format?: 'number' | 'currency'
+  currency?: boolean
 }
 
-export default function KPICard({ label, value, unit = '', icon, sub, decimals = 0, format = 'number' }: Props) {
-  const display = format === 'currency'
+export default function KPICard({ label, value, unit = '', icon, sub, decimals = 0, currency = false }: Props) {
+  const display = currency
     ? new Intl.NumberFormat('fr-FR', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 }).format(value)
     : `${value.toFixed(decimals)}${unit}`
 
