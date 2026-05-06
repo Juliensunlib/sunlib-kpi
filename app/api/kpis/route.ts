@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic'
+export const revalidate = 0
 import { NextRequest, NextResponse } from 'next/server'
 import { fetchAllAbonnes } from '@/lib/airtable'
 import { computeKPIs, type Segment, type TypeInstall } from '@/lib/kpi-engine'
