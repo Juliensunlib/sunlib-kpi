@@ -300,48 +300,150 @@ function PipelinePanel({ pipe, onClose }: { pipe: PipelineRow; onClose: () => vo
 
 // ─── Panneau commercial (drill-down) ──────────────────────────────────────────
 function ComPanel({ com, months, onClose }: { com: ComRow; months: string[]; onClose: () => void }) {
-  const instItems = com.installateurs as unknown as Record<string, unknown>[]
-  const instSort  = useSort(instItems, 'signes')
-  const [sel, setSel] = useState<InstRow | null>(null)
+  const instItems  = com.installateurs as unknown as Record<string, unknown>[]
+  const instSort   = useSort(instItems, 'signes')
+  const [sel, setSel]           = useState<InstRow | null>(null)
+  const [selMonth, setSelMonth] = useState<string | null>(null)
   const maxInst = Math.max(...com.installateurs.map(i => i.signes), 1)
+
+  // Stats du mois sélectionné ou globales
+  const monthData = selMonth ? com.monthly.find(r => r.month === selMonth) : null
+  const monthLabel = monthData?.label || selMonth?.slice(5) || ''
+
+  // Installateurs filtrés par mois sélectionné
+  const instForMonth = selMonth
+    ? com.installateurs
+        .map(inst => {
+          const m = inst.monthly.find(r => r.month === selMonth)
+          return { ...inst, signes: m?.signes || 0, annules: m?.annules || 0, capex: m?.capex || 0, kwc: m?.kwc || 0, poses: m?.poses || 0 }
+        })
+        .filter(i => i.signes + i.annules > 0)
+        .sort((a, b) => b.signes - a.signes)
+    : (instSort.sorted as unknown as InstRow[])
+
+  const maxInstMonth = Math.max(...instForMonth.map(i => i.signes), 1)
 
   return (
     <div className="fixed inset-0 z-30 flex">
       <div className="flex-1 bg-black/20 backdrop-blur-sm" onClick={onClose} />
       <div className="w-full max-w-3xl bg-white shadow-2xl flex flex-col overflow-hidden">
+
+        {/* Header */}
         <div className="bg-gradient-to-r from-blue-600 to-blue-700 p-5 text-white">
           <div className="flex items-center justify-between mb-4">
             <div className="flex items-center gap-3">
               <Avatar nom={com.nom} size={12} />
               <div>
                 <h2 className="text-xl font-bold">{com.nom}</h2>
-                <p className="text-blue-200 text-sm">{com.installateurs.length} installateur{com.installateurs.length > 1 ? 's' : ''}</p>
+                <div className="flex items-center gap-2 mt-0.5">
+                  <p className="text-blue-200 text-sm">{com.installateurs.length} installateurs</p>
+                  {selMonth && (
+                    <span className="flex items-center gap-1 bg-white/20 text-white text-xs px-2 py-0.5 rounded-full">
+                      📅 {monthLabel}
+                      <button onClick={() => { setSelMonth(null); setSel(null) }} className="ml-1 hover:text-red-300">✕</button>
+                    </span>
+                  )}
+                </div>
               </div>
             </div>
             <button onClick={onClose} className="text-white/60 hover:text-white text-2xl">✕</button>
           </div>
+
+          {/* KPIs : mois sélectionné ou global */}
           <div className="grid grid-cols-5 gap-2">
-            {[
-              { label: 'Signés',    value: String(com.signes)             },
-              { label: 'CAPEX',     value: fmtK(com.capex)                },
-              { label: 'kWc',       value: `${Math.round(com.kwc)}`       },
-              { label: 'Taux pose', value: `${com.taux_pose}%`             },
-              { label: 'Délai sig.',value: com.delai_moy_creation_signature > 0 ? `${com.delai_moy_creation_signature}j` : '—' },
-            ].map(({ label, value }) => (
-              <div key={label} className="bg-white/10 rounded-lg p-2 text-center">
-                <p className="text-white/60 text-xs">{label}</p>
-                <p className="text-white font-bold">{value}</p>
-              </div>
-            ))}
+            {selMonth ? (
+              <>
+                <div className="bg-white/10 rounded-lg p-2 text-center">
+                  <p className="text-white/60 text-xs">Signés {monthLabel}</p>
+                  <p className="text-white font-bold text-lg">{monthData?.signes || 0}</p>
+                </div>
+                <div className="bg-white/10 rounded-lg p-2 text-center">
+                  <p className="text-white/60 text-xs">Annulés</p>
+                  <p className="text-white font-bold text-lg">{monthData?.annules || 0}</p>
+                </div>
+                <div className="bg-white/10 rounded-lg p-2 text-center">
+                  <p className="text-white/60 text-xs">CAPEX</p>
+                  <p className="text-white font-bold text-lg">{fmtK(monthData?.capex || 0)}</p>
+                </div>
+                <div className="bg-white/10 rounded-lg p-2 text-center">
+                  <p className="text-white/60 text-xs">kWc</p>
+                  <p className="text-white font-bold text-lg">{Math.round(monthData?.kwc || 0)}</p>
+                </div>
+                <div className="bg-white/10 rounded-lg p-2 text-center">
+                  <p className="text-white/60 text-xs">Poses</p>
+                  <p className="text-white font-bold text-lg">{monthData?.poses || 0}</p>
+                </div>
+              </>
+            ) : (
+              <>
+                {[
+                  { label: 'Signés',    value: String(com.signes)           },
+                  { label: 'CAPEX',     value: fmtK(com.capex)              },
+                  { label: 'kWc',       value: `${Math.round(com.kwc)}`     },
+                  { label: 'Taux pose', value: `${com.taux_pose}%`           },
+                  { label: 'Délai sig.',value: com.delai_moy_creation_signature > 0 ? `${com.delai_moy_creation_signature}j` : '—' },
+                ].map(({ label, value }) => (
+                  <div key={label} className="bg-white/10 rounded-lg p-2 text-center">
+                    <p className="text-white/60 text-xs">{label}</p>
+                    <p className="text-white font-bold">{value}</p>
+                  </div>
+                ))}
+              </>
+            )}
           </div>
         </div>
+
         <div className="flex-1 overflow-y-auto p-4 space-y-4">
+          {/* Graphique mensuel */}
+          {!selMonth && (
+            <div>
+              <h3 className="text-sm font-semibold text-gray-700 mb-2">Activité mensuelle</h3>
+              <BarChart data={com.monthly} months={months} />
+            </div>
+          )}
+
+          {/* Heatmap cliquable */}
           <div>
-            <h3 className="text-sm font-semibold text-gray-700 mb-2">Activité mensuelle</h3>
-            <BarChart data={com.monthly} months={months} />
+            <div className="flex items-center justify-between mb-2">
+              <h3 className="text-sm font-semibold text-gray-700">
+                Heatmap mensuelle
+                {selMonth && <span className="text-blue-600 ml-2">· {monthLabel} sélectionné</span>}
+              </h3>
+              {selMonth && (
+                <button onClick={() => { setSelMonth(null); setSel(null) }}
+                  className="text-xs text-gray-400 hover:text-gray-600">
+                  Voir tout ×
+                </button>
+              )}
+            </div>
+            <div className="overflow-x-auto">
+              <div className="flex gap-1 min-w-max">
+                {months.map(m => {
+                  const d = com.monthly.find(r => r.month === m)
+                  const mx = Math.max(...com.monthly.map(r => r.signes), 1)
+                  const isSelected = selMonth === m
+                  return (
+                    <div key={m} className="flex flex-col items-center gap-1">
+                      <div onClick={() => { setSelMonth(selMonth === m ? null : m); setSel(null) }}
+                        className={`cursor-pointer transition-all ${isSelected ? 'ring-2 ring-blue-500 ring-offset-1 rounded' : ''}`}>
+                        <HeatCell v={d?.signes || 0} max={mx} />
+                      </div>
+                      <span className={`whitespace-nowrap text-center ${isSelected ? 'text-blue-600 font-semibold' : 'text-gray-400'}`}
+                        style={{ fontSize: 9 }}>
+                        {d?.label || m.slice(5)}
+                      </span>
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
           </div>
+
+          {/* Installateurs */}
           <div>
-            <h3 className="text-sm font-semibold text-gray-700 mb-2">Ses installateurs ({com.installateurs.length})</h3>
+            <h3 className="text-sm font-semibold text-gray-700 mb-2">
+              {selMonth ? `Installateurs actifs en ${monthLabel} (${instForMonth.length})` : `Ses installateurs (${com.installateurs.length})`}
+            </h3>
             {sel ? (
               <div className="border border-blue-200 rounded-xl overflow-hidden">
                 <div className="bg-blue-50 p-3 flex items-center justify-between">
@@ -350,46 +452,82 @@ function ComPanel({ com, months, onClose }: { com: ComRow; months: string[]; onC
                     <span className="font-semibold text-gray-800 text-sm truncate max-w-xs">{sel.nom}</span>
                   </div>
                   <div className="flex gap-3 text-sm">
-                    <span><span className="font-bold text-amber-600">{sel.signes}</span> signés</span>
-                    <span className="text-gray-500">{fmtK(sel.capex)}</span>
-                    <span className="text-gray-400">{sel.delai_moy_creation_signature > 0 ? `Délai: ${sel.delai_moy_creation_signature}j` : ''}</span>
+                    <span><span className="font-bold text-amber-600">{selMonth ? (sel.monthly.find(r => r.month === selMonth)?.signes || 0) : sel.signes}</span> signés</span>
+                    <span className="text-gray-500">{fmtK(selMonth ? (sel.monthly.find(r => r.month === selMonth)?.capex || 0) : sel.capex)}</span>
                   </div>
                 </div>
-                <div className="p-3"><BarChart data={sel.monthly} months={months} /></div>
+                <div className="p-3">
+                  {selMonth ? (
+                    <div className="text-center py-6 text-gray-400 text-sm">
+                      <p className="text-2xl mb-2">{sel.monthly.find(r => r.month === selMonth)?.signes || 0}</p>
+                      <p>contrats signés en {monthLabel}</p>
+                      <p className="text-xs mt-1">{fmtK(sel.monthly.find(r => r.month === selMonth)?.capex || 0)} CAPEX · {(sel.monthly.find(r => r.month === selMonth)?.kwc || 0).toFixed(1)} kWc</p>
+                    </div>
+                  ) : (
+                    <BarChart data={sel.monthly} months={months} />
+                  )}
+                </div>
               </div>
             ) : (
               <div className="overflow-x-auto">
                 <table className="w-full text-sm">
                   <thead>
                     <tr className="border-b border-gray-100">
-                      {[
-                        { label: 'Installateur', k: 'nom'         },
-                        { label: 'Signés',        k: 'signes'      },
-                        { label: 'Annulés',       k: 'annules'     },
-                        { label: 'CAPEX',         k: 'capex'       },
-                        { label: 'Poses',         k: 'poses'       },
-                        { label: 'Taux pose',     k: 'taux_pose'   },
-                        { label: 'Délai sig.',    k: 'delai_moy_creation_signature' },
-                      ].map(({ label, k }) => (
-                        <Th key={k} label={label} k={k} col={instSort.col} dir={instSort.dir} onSort={instSort.toggle} />
-                      ))}
+                      {!selMonth && (
+                        <>
+                          {[
+                            { label: 'Installateur', k: 'nom'         },
+                            { label: 'Signés',        k: 'signes'      },
+                            { label: 'Annulés',       k: 'annules'     },
+                            { label: 'CAPEX',         k: 'capex'       },
+                            { label: 'Poses',         k: 'poses'       },
+                            { label: 'Taux pose',     k: 'taux_pose'   },
+                            { label: 'Délai sig.',    k: 'delai_moy_creation_signature' },
+                          ].map(({ label, k }) => (
+                            <Th key={k} label={label} k={k} col={instSort.col} dir={instSort.dir} onSort={instSort.toggle} />
+                          ))}
+                        </>
+                      )}
+                      {selMonth && (
+                        <>
+                          <th className="px-3 py-1.5 text-left text-xs font-semibold text-gray-500">Installateur</th>
+                          <th className="px-3 py-1.5 text-left text-xs font-semibold text-gray-500">Signés</th>
+                          <th className="px-3 py-1.5 text-left text-xs font-semibold text-gray-500">Annulés</th>
+                          <th className="px-3 py-1.5 text-left text-xs font-semibold text-gray-500">CAPEX</th>
+                          <th className="px-3 py-1.5 text-left text-xs font-semibold text-gray-500">kWc</th>
+                          <th className="px-3 py-1.5 text-left text-xs font-semibold text-gray-500">Poses</th>
+                        </>
+                      )}
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-50">
-                    {(instSort.sorted as unknown as InstRow[]).map((inst, i) => (
-                      <tr key={i} onClick={() => setSel(inst)} className="hover:bg-blue-50 cursor-pointer">
+                    {instForMonth.map((inst, i) => (
+                      <tr key={i} onClick={() => setSel(com.installateurs.find(ci => ci.nom === inst.nom) || null)}
+                        className="hover:bg-blue-50 cursor-pointer transition-colors">
                         <td className="px-3 py-2">
-                          <PctBar v={inst.signes} max={maxInst} color="bg-amber-400" />
+                          <PctBar v={inst.signes} max={selMonth ? maxInstMonth : maxInst} color="bg-amber-400" />
                           <p className="text-xs text-gray-600 mt-0.5 truncate max-w-[160px]">{inst.nom}</p>
                         </td>
                         <td className="px-3 py-2 font-medium text-gray-800">{inst.signes}</td>
                         <td className="px-3 py-2 text-red-500 font-medium">{inst.annules || '—'}</td>
                         <td className="px-3 py-2 text-gray-700">{fmtK(inst.capex)}</td>
+                        <td className="px-3 py-2 text-gray-600">{inst.kwc.toFixed(1)}</td>
                         <td className="px-3 py-2 text-gray-700">{inst.poses}</td>
-                        <td className="px-3 py-2"><TauxPose v={inst.taux_pose} /></td>
-                        <td className="px-3 py-2 text-gray-500 text-xs">{inst.delai_moy_creation_signature > 0 ? `${inst.delai_moy_creation_signature}j` : '—'}</td>
+                        {!selMonth && (
+                          <td className="px-3 py-2">
+                            <TauxPose v={inst.taux_pose} />
+                          </td>
+                        )}
+                        {!selMonth && (
+                          <td className="px-3 py-2 text-gray-500 text-xs">
+                            {inst.delai_moy_creation_signature > 0 ? `${inst.delai_moy_creation_signature}j` : '—'}
+                          </td>
+                        )}
                       </tr>
                     ))}
+                    {instForMonth.length === 0 && (
+                      <tr><td colSpan={7} className="px-3 py-8 text-center text-gray-400 text-sm">Aucune activité ce mois</td></tr>
+                    )}
                   </tbody>
                 </table>
               </div>
