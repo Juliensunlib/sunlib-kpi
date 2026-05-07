@@ -94,6 +94,23 @@ export default function DashboardClient() {
   const [log, setLog]                 = useState<Array<{ date: string; entries: ChangeEntry[] }>>([])
   const [refreshing, setRefreshing]   = useState(false)
 
+  // ─── Notifications non lues ────────────────────────────────────────────────
+  const [lastRead, setLastRead] = useState<string>(() => {
+    if (typeof window !== 'undefined') {
+      return localStorage.getItem('kpi_last_read') || ''
+    }
+    return ''
+  })
+
+  const unreadCount = log.filter(e => e.date > lastRead).length
+
+  function markAsRead() {
+    const now = new Date().toISOString()
+    localStorage.setItem('kpi_last_read', now)
+    setLastRead(now)
+  }
+
+  // ─── Chargement KPIs ───────────────────────────────────────────────────────
   const load = useCallback(async (seg: Segment, ti: TypeInstall, yr: string) => {
     setLoading(true); setError(null)
     try {
@@ -109,10 +126,11 @@ export default function DashboardClient() {
 
   useEffect(() => { load('Tous', 'Tous', '') }, [load])
 
+  // ─── Chargement changelog ──────────────────────────────────────────────────
   useEffect(() => {
     fetch('/api/snapshot')
       .then(r => r.json())
-      .then(j => { if (j.changelog) setLog(j.changelog) })
+      .then(j => setLog(j.changelog ?? []))
       .catch(() => {})
   }, [])
 
@@ -127,7 +145,8 @@ export default function DashboardClient() {
       await fetch('/api/snapshot', { method: 'POST' })
       const res  = await fetch('/api/snapshot')
       const json = await res.json()
-      if (json.changelog) setLog(json.changelog)
+      // Toujours mettre à jour le log, même si vide
+      setLog(json.changelog ?? [])
       alert('Snapshot créé ✓')
     } catch { alert('Erreur snapshot') }
     setRefreshing(false)
@@ -198,12 +217,13 @@ export default function DashboardClient() {
                 {data.total_records} records · {new Date(data.last_updated).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}
               </span>
             )}
+            {/* Bouton Journal avec badge non lus */}
             <button onClick={() => setShowLog(!showLog)}
               className="relative text-sm px-3 py-1.5 border border-gray-200 rounded-lg hover:bg-gray-50">
               📋 Journal
-              {log.length > 0 && (
-                <span className="absolute -top-1 -right-1 bg-amber-500 text-white text-xs w-4 h-4 rounded-full flex items-center justify-center">
-                  {Math.min(log.length, 9)}
+              {unreadCount > 0 && (
+                <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs w-4 h-4 rounded-full flex items-center justify-center font-bold">
+                  {Math.min(unreadCount, 9)}
                 </span>
               )}
             </button>
@@ -220,7 +240,6 @@ export default function DashboardClient() {
       </header>
 
       <main className="max-w-screen-2xl mx-auto px-4 py-5">
-
         {loading && (
           <div className="flex items-center justify-center py-24">
             <div className="text-center">
@@ -239,7 +258,7 @@ export default function DashboardClient() {
 
         {!loading && !error && g && (
           <>
-            {/* Ligne 1 : métriques volumes */}
+            {/* Ligne 1 — volumes */}
             <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-3">
               <KPICard label="Contrats signés"  value={g.total_signes}     icon="📝" />
               <KPICard label="Poses réalisées"   value={g.total_poses}      icon="🔧"
@@ -249,7 +268,7 @@ export default function DashboardClient() {
                 sub={`${Math.round(g.mandats_signes / Math.max(g.mandats_total, 1) * 100)}% signés`} />
             </div>
 
-            {/* Ligne 2 : métriques financières */}
+            {/* Ligne 2 — financier */}
             <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-5">
               <KPICard label="CAPEX signé"       value={g.total_capex_signes} icon="💶" currency />
               <KPICard label="CAPEX posé"        value={g.total_capex_poses}  icon="💰" currency />
@@ -292,16 +311,32 @@ export default function DashboardClient() {
         )}
       </main>
 
-      {/* Journal */}
+      {/* Panneau Journal */}
       {showLog && (
         <div className="fixed inset-y-0 right-0 w-96 max-w-full bg-white border-l border-gray-200 shadow-xl z-20 flex flex-col">
+          {/* En-tête avec bouton "Marquer comme lu" */}
           <div className="flex items-center justify-between p-4 border-b">
-            <h2 className="font-semibold text-gray-900">Journal des modifications</h2>
-            <button onClick={() => setShowLog(false)}
-              className="text-gray-400 hover:text-gray-600 text-xl leading-none">✕</button>
+            <div className="flex items-center gap-2">
+              <h2 className="font-semibold text-gray-900">Journal</h2>
+              {unreadCount > 0 && (
+                <span className="bg-red-500 text-white text-xs px-1.5 py-0.5 rounded-full font-bold">
+                  {unreadCount} non lu{unreadCount > 1 ? 's' : ''}
+                </span>
+              )}
+            </div>
+            <div className="flex items-center gap-2">
+              {unreadCount > 0 && (
+                <button onClick={markAsRead}
+                  className="text-xs text-amber-600 hover:text-amber-800 font-medium px-2 py-1 bg-amber-50 hover:bg-amber-100 rounded-lg transition-colors">
+                  ✓ Marquer comme lu
+                </button>
+              )}
+              <button onClick={() => setShowLog(false)}
+                className="text-gray-400 hover:text-gray-600 text-xl leading-none">✕</button>
+            </div>
           </div>
           <div className="flex-1 overflow-y-auto">
-            <Changelog entries={log} />
+            <Changelog entries={log} lastRead={lastRead} />
           </div>
         </div>
       )}
