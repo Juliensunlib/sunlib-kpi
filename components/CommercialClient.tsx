@@ -445,7 +445,7 @@ export default function CommercialClient() {
     if (!data) return [] as InstRow[]
     const list = search ? data.par_installateur.filter(i => i.nom.toLowerCase().includes(search.toLowerCase())) : data.par_installateur
     return [...list].sort((a, b) => {
-      const av = (a as Record<string, unknown>)[instSort.col], bv = (b as Record<string, unknown>)[instSort.col]
+      const av = (a as unknown as Record<string, unknown>)[instSort.col], bv = (b as unknown as Record<string, unknown>)[instSort.col]
       if (typeof av === 'number' && typeof bv === 'number') return instSort.dir === 'desc' ? bv - av : av - bv
       return 0
     }) as InstRow[]
