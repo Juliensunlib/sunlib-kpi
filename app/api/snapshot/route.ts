@@ -205,7 +205,8 @@ function diffSnapshots(prev: SnapshotData, curr: SnapshotData): ChangeEntry[] {
   }
 
   // ─── Diff au niveau record ──────────────────────────────────────────────────
-  const pi = prev.index, ci = curr.index
+  const pi = prev.index || {}
+  const ci = curr.index || {}
 
   const annules:    string[] = []
   const desannules: string[] = []
