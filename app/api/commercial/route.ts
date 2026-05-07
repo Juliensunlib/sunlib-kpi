@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server'
 
 export const dynamic = 'force-dynamic'
 
-// ─── Helpers module-level ────────────────────────────────────────────────────
+// ─── Helpers ──────────────────────────────────────────────────────────────────
 function strVal(v: unknown): string {
   if (v === null || v === undefined || v === false) return ''
   if (typeof v === 'string') return v
@@ -42,11 +42,31 @@ function monthLabel(ym: string): string {
     .replace('.', '')
 }
 
-// ─── Constantes champs Airtable ───────────────────────────────────────────────
+function daysBetween(d1: string, d2: string): number {
+  if (!d1 || !d2) return -1
+  const t1 = new Date(d1).getTime()
+  const t2 = new Date(d2).getTime()
+  if (isNaN(t1) || isNaN(t2)) return -1
+  return Math.round(Math.abs(t2 - t1) / (1000 * 60 * 60 * 24))
+}
+
+function isWithin30Days(dateStr: string): boolean {
+  if (!dateStr) return false
+  const d = new Date(dateStr).getTime()
+  if (isNaN(d)) return false
+  const now = Date.now()
+  return (now - d) <= 30 * 24 * 60 * 60 * 1000
+}
+
+// ─── Champs Airtable ──────────────────────────────────────────────────────────
 const F = {
   MOIS_SIGNATURE:    'fldk94N7n4aQW482K',
+  DATE_SIGNATURE:    'fldNyXyZv7xsbpVaV',
+  DATE_CREATION:     'fldxygbu165RonF4P',
+  DATE_EDITION:      'fldsjH7EmfCDgvF1t',
   CONTRAT_ATT:       'fldh1l1uImywSLf8a',
   STATUT_ABONNE:     'fldNBDnMAaxdSXEvR',
+  STATUT_DOSSIER:    'fldXvGXjjI0yM1BtU',
   ETAT_F2:           'fldFbme1enY3VGb40',
   DUREE_F2_J:        'fldzMJMqnDQ5eNRUo',
   KWC:               'fldTJkt211i53Ktmy',
@@ -57,6 +77,10 @@ const F = {
   MASTEUR:           'fldWBnPJD6A1tiVA2',
   SEGMENTATION_INST: 'fldRVUOfmjSxYOJF5',
   APPORTEUR:         'fldJyaa6ss3mHJ2zZ',
+  NOM:               'fldfnBO2Xb6mNgAcq',
+  PRENOM:            'fldhxncaPKtHlqqgZ',
+  NOM_ENTREPRISE:    'flduVtvZSWvLPSBEg',
+  SEGMENT:           'fld3SpiGzcJrADLgL',
 }
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -67,10 +91,40 @@ interface MonthlyRow {
   capex: number; kwc: number; poses: number
 }
 
+interface PipelineItem {
+  id: string
+  nom_abonne: string
+  installateur: string
+  segment: string
+  capex: number
+  kwc: number
+  date_creation: string
+  date_edition: string
+  date_signature: string
+  signe: boolean
+  statut: string
+  statut_dossier: string
+  delai_creation_signature: number
+}
+
+interface PipelineRow {
+  nom: string
+  total_pipe: number
+  signes_pipe: number
+  taux_conversion: number
+  capex_pipe: number
+  kwc_pipe: number
+  capex_signe: number
+  kwc_signe: number
+  delai_moy: number
+  items: PipelineItem[]
+}
+
 interface InstRow {
   nom: string; signes: number; annules: number; taux_annulation: number
   capex: number; kwc: number; poses: number; taux_pose: number
-  duree_f2_moy: number; monthly: MonthlyRow[]
+  duree_f2_moy: number; delai_moy_creation_signature: number
+  monthly: MonthlyRow[]
 }
 
 interface ComRow {
@@ -78,10 +132,11 @@ interface ComRow {
   capex: number; kwc: number; poses: number; taux_pose: number
   abo_moyen: number; duree_f2_moy: number
   tendance_signes: number; tendance_capex: number
+  delai_moy_creation_signature: number
   monthly: MonthlyRow[]; installateurs: InstRow[]
 }
 
-// ─── Fetch Airtable ───────────────────────────────────────────────────────────
+// ─── Fetch ────────────────────────────────────────────────────────────────────
 async function fetchAll(): Promise<Rec[]> {
   const base  = process.env.AIRTABLE_BASE_ID!
   const table = process.env.AIRTABLE_ABONNES_TABLE!
@@ -100,7 +155,7 @@ async function fetchAll(): Promise<Rec[]> {
   return all
 }
 
-// ─── Predicats module-level ───────────────────────────────────────────────────
+// ─── Prédicats ────────────────────────────────────────────────────────────────
 function hasContrat(r: Rec): boolean {
   const att = r.fields[F.CONTRAT_ATT]
   return Array.isArray(att) && att.length > 0
@@ -114,7 +169,15 @@ function isPose(r: Rec): boolean {
   return strVal(r.fields[F.ETAT_F2]) === 'Validée'
 }
 
-// ─── Builder mensuel module-level ─────────────────────────────────────────────
+function nomAbonne(r: Rec): string {
+  const seg = selVal(r.fields[F.SEGMENT])
+  if (seg === 'Pro') return strVal(r.fields[F.NOM_ENTREPRISE]) || strVal(r.fields[F.NOM])
+  const p = strVal(r.fields[F.PRENOM])
+  const n = strVal(r.fields[F.NOM])
+  return [p, n].filter(Boolean).join(' ') || 'Inconnu'
+}
+
+// ─── Builder mensuel ─────────────────────────────────────────────────────────
 function buildMonthly(recs: Rec[], months: string[]): MonthlyRow[] {
   return months.map(month => {
     const mrs    = recs.filter(r => strVal(r.fields[F.MOIS_SIGNATURE]) === month)
@@ -132,7 +195,50 @@ function buildMonthly(recs: Rec[], months: string[]): MonthlyRow[] {
   })
 }
 
-// ─── Endpoint GET ─────────────────────────────────────────────────────────────
+// ─── Délai création → signature ───────────────────────────────────────────────
+function calcDelaiMoy(recs: Rec[]): number {
+  const delais: number[] = []
+  for (const r of recs) {
+    const dateSig  = strVal(r.fields[F.DATE_SIGNATURE])
+    const dateCrea = strVal(r.fields[F.DATE_CREATION])
+    if (!dateSig || !dateCrea) continue
+    const d = daysBetween(dateCrea, dateSig)
+    if (d >= 0 && d < 365) delais.push(d)  // ignorer les valeurs aberrantes
+  }
+  return delais.length ? Math.round(avgArr(delais)) : 0
+}
+
+// ─── Pipeline items ───────────────────────────────────────────────────────────
+function buildPipelineItems(recs: Rec[]): PipelineItem[] {
+  return recs
+    .filter(r => {
+      const dateEdition  = strVal(r.fields[F.DATE_EDITION])
+      const dateCreation = strVal(r.fields[F.DATE_CREATION])
+      return isWithin30Days(dateEdition) || isWithin30Days(dateCreation)
+    })
+    .map(r => {
+      const dateSig  = strVal(r.fields[F.DATE_SIGNATURE])
+      const dateCrea = strVal(r.fields[F.DATE_CREATION])
+      return {
+        id:           r.id,
+        nom_abonne:   nomAbonne(r),
+        installateur: strVal(r.fields[F.INSTALLATEUR_NOM]) || '—',
+        segment:      selVal(r.fields[F.SEGMENT]),
+        capex:        numVal(r.fields[F.CAPEX_HT]),
+        kwc:          numVal(r.fields[F.KWC]),
+        date_creation:  dateCrea,
+        date_edition:   strVal(r.fields[F.DATE_EDITION]),
+        date_signature: dateSig,
+        signe:          hasContrat(r) && !isAnnule(r),
+        statut:         selVal(r.fields[F.STATUT_ABONNE]),
+        statut_dossier: selVal(r.fields[F.STATUT_DOSSIER]),
+        delai_creation_signature: dateSig && dateCrea ? daysBetween(dateCrea, dateSig) : -1,
+      }
+    })
+    .sort((a, b) => (b.date_edition || b.date_creation).localeCompare(a.date_edition || a.date_creation))
+}
+
+// ─── GET ──────────────────────────────────────────────────────────────────────
 export async function GET(req: Request) {
   const { searchParams } = new URL(req.url)
   const annee = searchParams.get('annee') || ''
@@ -142,51 +248,47 @@ export async function GET(req: Request) {
     const records     = await fetchAll()
     const avecContrat = records.filter(r => hasContrat(r))
 
-    // Filtre selon la période
     const filteredAll = mois
       ? avecContrat.filter(r => strVal(r.fields[F.MOIS_SIGNATURE]) === mois)
       : annee
         ? avecContrat.filter(r => strVal(r.fields[F.MOIS_SIGNATURE]).startsWith(annee))
         : avecContrat
 
-    // Mois disponibles (12 derniers)
     const allMonths = Array.from(
       new Set(avecContrat.map(r => strVal(r.fields[F.MOIS_SIGNATURE])).filter(Boolean))
     ).sort()
     const recentMonths = allMonths.slice(-12)
 
-    // Mois courant et précédent pour tendances
     const now      = new Date()
     const curMois  = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
     const prevMois = allMonths[allMonths.indexOf(curMois) - 1] || allMonths[allMonths.length - 2] || ''
 
     // ─── Par commercial ────────────────────────────────────────────────────────
     const comMap = new Map<string, Rec[]>()
-    for (const r of avecContrat) {
+    for (const r of records) {  // TOUS les records pour le pipeline
       const com = selVal(r.fields[F.COMMERCIAL]) || 'Non assigné'
       if (!comMap.has(com)) comMap.set(com, [])
       comMap.get(com)!.push(r)
     }
 
     const par_commercial: ComRow[] = Array.from(comMap.entries()).map(([nom, recs]) => {
-      // Métriques sur la période filtrée
-      const filtRecs  = mois
-        ? recs.filter(r => strVal(r.fields[F.MOIS_SIGNATURE]) === mois)
+      const filtRecs    = mois
+        ? recs.filter(r => hasContrat(r) && strVal(r.fields[F.MOIS_SIGNATURE]) === mois)
         : annee
-          ? recs.filter(r => strVal(r.fields[F.MOIS_SIGNATURE]).startsWith(annee))
-          : recs
+          ? recs.filter(r => hasContrat(r) && strVal(r.fields[F.MOIS_SIGNATURE]).startsWith(annee))
+          : recs.filter(r => hasContrat(r))
 
       const signesRecs  = filtRecs.filter(r => !isAnnule(r))
       const annulesRecs = filtRecs.filter(r => isAnnule(r))
       const posesRecs   = signesRecs.filter(r => isPose(r))
 
-      // Tendance mois courant vs précédent
-      const curRecs  = recs.filter(r => strVal(r.fields[F.MOIS_SIGNATURE]) === curMois  && !isAnnule(r))
-      const prevRecs = recs.filter(r => strVal(r.fields[F.MOIS_SIGNATURE]) === prevMois && !isAnnule(r))
+      const curRecs  = recs.filter(r => hasContrat(r) && strVal(r.fields[F.MOIS_SIGNATURE]) === curMois  && !isAnnule(r))
+      const prevRecs = recs.filter(r => hasContrat(r) && strVal(r.fields[F.MOIS_SIGNATURE]) === prevMois && !isAnnule(r))
 
-      // Installateurs de ce commercial
+      // Installateurs
       const instMap = new Map<string, Rec[]>()
       for (const r of recs) {
+        if (!hasContrat(r)) continue
         const inst = strVal(r.fields[F.INSTALLATEUR_NOM]) || 'Non renseigné'
         if (!instMap.has(inst)) instMap.set(inst, [])
         instMap.get(inst)!.push(r)
@@ -211,6 +313,7 @@ export async function GET(req: Request) {
           poses:           iPoses.length,
           taux_pose:       iSignes.length ? Math.round(iPoses.length / iSignes.length * 100) : 0,
           duree_f2_moy:    avgArr(iPoses.map(r => numVal(r.fields[F.DUREE_F2_J])).filter(v => v > 0)),
+          delai_moy_creation_signature: calcDelaiMoy(iSignes),
           monthly:         buildMonthly(instRecs, recentMonths),
         }
       }).sort((a, b) => b.signes - a.signes)
@@ -230,10 +333,34 @@ export async function GET(req: Request) {
         tendance_capex:
           curRecs.reduce((s, r) => s + numVal(r.fields[F.CAPEX_HT]), 0) -
           prevRecs.reduce((s, r) => s + numVal(r.fields[F.CAPEX_HT]), 0),
-        monthly:      buildMonthly(recs, recentMonths),
+        delai_moy_creation_signature: calcDelaiMoy(signesRecs),
+        monthly:      buildMonthly(recs.filter(r => hasContrat(r)), recentMonths),
         installateurs,
       }
     }).sort((a, b) => b.signes - a.signes)
+
+    // ─── Pipeline 30j par commercial ──────────────────────────────────────────
+    const pipeline_par_commercial: PipelineRow[] = Array.from(comMap.entries()).map(([nom, recs]) => {
+      const items     = buildPipelineItems(recs)
+      const signesP   = items.filter(i => i.signe)
+      const delais    = items.filter(i => i.signe && i.delai_creation_signature >= 0).map(i => i.delai_creation_signature)
+      return {
+        nom,
+        total_pipe:      items.length,
+        signes_pipe:     signesP.length,
+        taux_conversion: items.length ? Math.round(signesP.length / items.length * 100) : 0,
+        capex_pipe:      items.reduce((s, i) => s + i.capex, 0),
+        kwc_pipe:        items.reduce((s, i) => s + i.kwc, 0),
+        capex_signe:     signesP.reduce((s, i) => s + i.capex, 0),
+        kwc_signe:       signesP.reduce((s, i) => s + i.kwc, 0),
+        delai_moy:       delais.length ? Math.round(avgArr(delais)) : 0,
+        items,
+      }
+    }).filter(p => p.total_pipe > 0).sort((a, b) => b.total_pipe - a.total_pipe)
+
+    // Pipeline global 30j
+    const allPipeItems = buildPipelineItems(records)
+    const allPipeSigned = allPipeItems.filter(i => i.signe)
 
     // ─── Par installateur global ───────────────────────────────────────────────
     const instMapGlobal = new Map<string, Rec[]>()
@@ -262,11 +389,12 @@ export async function GET(req: Request) {
         poses:           poses.length,
         taux_pose:       signes.length ? Math.round(poses.length / signes.length * 100) : 0,
         duree_f2_moy:    avgArr(poses.map(r => numVal(r.fields[F.DUREE_F2_J])).filter(v => v > 0)),
+        delai_moy_creation_signature: calcDelaiMoy(signes),
         monthly:         buildMonthly(recs, recentMonths),
       }
     }).sort((a, b) => b.signes - a.signes)
 
-    // ─── Par segmentation installateur ────────────────────────────────────────
+    // ─── Segmentation & apporteurs ────────────────────────────────────────────
     const par_segmentation: Record<string, number> = {}
     const signesGlobal = filteredAll.filter(r => !isAnnule(r))
     for (const r of signesGlobal) {
@@ -274,11 +402,6 @@ export async function GET(req: Request) {
       par_segmentation[seg] = (par_segmentation[seg] || 0) + 1
     }
 
-    // ─── Apporteurs d'affaire ──────────────────────────────────────────────────
-    const avecApporteur = signesGlobal.filter(r => r.fields[F.APPORTEUR] === true).length
-    const sansApporteur = signesGlobal.length - avecApporteur
-
-    // ─── Métriques globales ────────────────────────────────────────────────────
     const total_annules = filteredAll.filter(r => isAnnule(r)).length
     const total_signes  = filteredAll.length - total_annules
 
@@ -288,7 +411,20 @@ export async function GET(req: Request) {
       par_commercial,
       par_installateur,
       par_segmentation,
-      apporteurs: { avec: avecApporteur, sans: sansApporteur },
+      pipeline_par_commercial,
+      pipeline_global: {
+        total:           allPipeItems.length,
+        signes:          allPipeSigned.length,
+        taux_conversion: allPipeItems.length ? Math.round(allPipeSigned.length / allPipeItems.length * 100) : 0,
+        capex_pipe:      allPipeItems.reduce((s, i) => s + i.capex, 0),
+        capex_signe:     allPipeSigned.reduce((s, i) => s + i.capex, 0),
+        kwc_pipe:        allPipeItems.reduce((s, i) => s + i.kwc, 0),
+        kwc_signe:       allPipeSigned.reduce((s, i) => s + i.kwc, 0),
+      },
+      apporteurs: {
+        avec: signesGlobal.filter(r => r.fields[F.APPORTEUR] === true).length,
+        sans: signesGlobal.filter(r => r.fields[F.APPORTEUR] !== true).length,
+      },
       meta: {
         total_signes,
         total_annules,
