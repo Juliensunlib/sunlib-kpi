@@ -25,6 +25,22 @@ function avg(arr: number[]): number {
   return arr.length ? arr.reduce((a, b) => a + b, 0) / arr.length : 0
 }
 
+function sel(v: unknown): string {
+  if (typeof v === 'object' && v !== null && 'name' in (v as object))
+    return String((v as Record<string, unknown>).name)
+  if (typeof v === 'string') return v
+  if (Array.isArray(v) && v.length > 0) return sel(v[0])
+  return ''
+}
+
+function monthLabel(ym: string): string {
+  if (!ym || !ym.includes('-')) return ym
+  const [y, m] = ym.split('-')
+  return new Date(Number(y), Number(m) - 1, 1)
+    .toLocaleDateString('fr-FR', { month: 'short', year: '2-digit' })
+    .replace('.', '')
+}
+
 const F = {
   MOIS_SIGNATURE:     'fldk94N7n4aQW482K',
   CONTRAT_ATTACHMENT: 'fldh1l1uImywSLf8a',
@@ -42,14 +58,6 @@ const F = {
 }
 
 type Rec = { id: string; fields: Record<string, unknown> }
-
-function sel(v: unknown): string {
-  if (typeof v === 'object' && v !== null && 'name' in (v as object))
-    return String((v as Record<string, unknown>).name)
-  if (typeof v === 'string') return v
-  if (Array.isArray(v) && v.length > 0) return sel(v[0])
-  return ''
-}
 
 async function fetchAll(): Promise<Rec[]> {
   const base  = process.env.AIRTABLE_BASE_ID!
@@ -69,131 +77,234 @@ async function fetchAll(): Promise<Rec[]> {
   return all
 }
 
-function hasContrat(f: Record<string, unknown>): boolean {
-  const att = f[F.CONTRAT_ATTACHMENT]
-  return Array.isArray(att) && att.length > 0
+interface MonthlyRow {
+  month: string
+  label: string
+  signes: number
+  annules: number
+  capex: number
+  kwc: number
+  poses: number
+}
+
+interface InstRow {
+  nom: string
+  signes: number
+  annules: number
+  taux_annulation: number
+  capex: number
+  kwc: number
+  poses: number
+  taux_pose: number
+  duree_f2_moy: number
+  monthly: MonthlyRow[]
+}
+
+interface ComRow {
+  nom: string
+  signes: number
+  annules: number
+  taux_annulation: number
+  capex: number
+  kwc: number
+  poses: number
+  taux_pose: number
+  abo_moyen: number
+  duree_f2_moy: number
+  tendance_signes: number
+  tendance_capex: number
+  monthly: MonthlyRow[]
+  installateurs: InstRow[]
 }
 
 export async function GET(req: Request) {
   const { searchParams } = new URL(req.url)
-  const annee = searchParams.get('annee') || ''
+  const annee  = searchParams.get('annee') || ''
+  const mois   = searchParams.get('mois') || ''   // ex: "2026-04"
 
   try {
     const records = await fetchAll()
-    const avecContrat = records.filter(r => hasContrat(r.fields))
-    const filteredAll = annee
-      ? avecContrat.filter(r => str(r.fields[F.MOIS_SIGNATURE]).startsWith(annee))
-      : avecContrat
+    const avecContrat = records.filter(r => {
+      const att = r.fields[F.CONTRAT_ATTACHMENT]
+      return Array.isArray(att) && att.length > 0
+    })
 
-    // ─── Par commercial (Propio SOFTR) ────────────────────────────────────
-    const comMap = new Map<string, { signes: Rec[]; annules: Rec[]; poses: Rec[] }>()
-    for (const r of filteredAll) {
+    // Filtre période
+    let filtered = avecContrat
+    if (mois) {
+      filtered = avecContrat.filter(r => str(r.fields[F.MOIS_SIGNATURE]) === mois)
+    } else if (annee) {
+      filtered = avecContrat.filter(r => str(r.fields[F.MOIS_SIGNATURE]).startsWith(annee))
+    }
+
+    // Tous les mois disponibles (triés)
+    const allMonths = [...new Set(avecContrat.map(r => str(r.fields[F.MOIS_SIGNATURE])).filter(Boolean))]
+      .sort()
+    const recentMonths = allMonths.slice(-12)
+
+    // Mois précédent et mois courant pour tendances
+    const now     = new Date()
+    const curMois = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
+    const prevMois = allMonths[allMonths.indexOf(curMois) - 1] || allMonths[allMonths.length - 2] || ''
+
+    function isAnnule(r: Rec) { return str(r.fields[F.STATUT_ABONNE]) === 'Annulé' }
+    function isPose(r: Rec)   { return str(r.fields[F.ETAT_F2]) === 'Validée' }
+
+    // ─── Builder helper ─────────────────────────────────────────────────────
+    function buildMonthly(recs: Rec[], months: string[]): MonthlyRow[] {
+      return months.map(month => {
+        const mrs = recs.filter(r => str(r.fields[F.MOIS_SIGNATURE]) === month)
+        const signes = mrs.filter(r => !isAnnule(r))
+        const annules = mrs.filter(r => isAnnule(r))
+        return {
+          month,
+          label:   monthLabel(month),
+          signes:  signes.length,
+          annules: annules.length,
+          capex:   signes.reduce((s, r) => s + num(r.fields[F.CAPEX_HT]), 0),
+          kwc:     signes.reduce((s, r) => s + num(r.fields[F.KWC]), 0),
+          poses:   signes.filter(r => isPose(r)).length,
+        }
+      })
+    }
+
+    // ─── Par commercial ──────────────────────────────────────────────────────
+    const comMap = new Map<string, Rec[]>()
+    for (const r of avecContrat) {  // tous les contrats pour avoir les mensuels complets
       const com = sel(r.fields[F.COMMERCIAL]) || 'Non assigné'
-      if (!comMap.has(com)) comMap.set(com, { signes: [], annules: [], poses: [] })
-      const e = comMap.get(com)!
-      if (str(r.fields[F.STATUT_ABONNE]) === 'Annulé') {
-        e.annules.push(r)
-      } else {
-        e.signes.push(r)
-        if (str(r.fields[F.ETAT_F2]) === 'Validée') e.poses.push(r)
-      }
+      if (!comMap.has(com)) comMap.set(com, [])
+      comMap.get(com)!.push(r)
     }
 
-    const par_commercial = Array.from(comMap.entries())
-      .map(([nom, { signes, annules, poses }]) => ({
-        nom,
-        signes:         signes.length,
-        annules:        annules.length,
-        taux_annulation: signes.length + annules.length
-          ? Math.round(annules.length / (signes.length + annules.length) * 100) : 0,
-        capex:          signes.reduce((s, r) => s + num(r.fields[F.CAPEX_HT]), 0),
-        kwc:            signes.reduce((s, r) => s + num(r.fields[F.KWC]), 0),
-        poses:          poses.length,
-        taux_pose:      signes.length ? Math.round(poses.length / signes.length * 100) : 0,
-        abo_moyen:      avg(signes.map(r => num(r.fields[F.ABONNEMENT_KPI])).filter(v => v > 0)),
-        duree_f2_moy:   avg(poses.map(r => num(r.fields[F.DUREE_F2_J])).filter(v => v > 0)),
-      }))
-      .sort((a, b) => b.signes - a.signes)
+    const par_commercial: ComRow[] = Array.from(comMap.entries()).map(([nom, recs]) => {
+      // Filtrer pour les métriques globales selon la période
+      const filteredRecs = mois
+        ? recs.filter(r => str(r.fields[F.MOIS_SIGNATURE]) === mois)
+        : annee
+          ? recs.filter(r => str(r.fields[F.MOIS_SIGNATURE]).startsWith(annee))
+          : recs
 
-    // ─── Par installateur ──────────────────────────────────────────────────
-    const instMap = new Map<string, { signes: Rec[]; annules: Rec[]; poses: Rec[] }>()
-    for (const r of filteredAll) {
+      const signesRecs  = filteredRecs.filter(r => !isAnnule(r))
+      const annulesRecs = filteredRecs.filter(r => isAnnule(r))
+      const posesRecs   = signesRecs.filter(r => isPose(r))
+
+      // Tendance : mois courant vs mois précédent
+      const curRecs  = recs.filter(r => str(r.fields[F.MOIS_SIGNATURE]) === curMois && !isAnnule(r))
+      const prevRecs = recs.filter(r => str(r.fields[F.MOIS_SIGNATURE]) === prevMois && !isAnnule(r))
+
+      // Installateurs de ce commercial
+      const instMap = new Map<string, Rec[]>()
+      for (const r of recs) {
+        const inst = str(r.fields[F.INSTALLATEUR_NOM]) || 'Non renseigné'
+        if (!instMap.has(inst)) instMap.set(inst, [])
+        instMap.get(inst)!.push(r)
+      }
+
+      const installateurs: InstRow[] = Array.from(instMap.entries()).map(([instNom, instRecs]) => {
+        const filtInst  = mois
+          ? instRecs.filter(r => str(r.fields[F.MOIS_SIGNATURE]) === mois)
+          : annee
+            ? instRecs.filter(r => str(r.fields[F.MOIS_SIGNATURE]).startsWith(annee))
+            : instRecs
+        const iSignes  = filtInst.filter(r => !isAnnule(r))
+        const iAnnules = filtInst.filter(r => isAnnule(r))
+        const iPoses   = iSignes.filter(r => isPose(r))
+        return {
+          nom:             instNom,
+          signes:          iSignes.length,
+          annules:         iAnnules.length,
+          taux_annulation: filtInst.length ? Math.round(iAnnules.length / filtInst.length * 100) : 0,
+          capex:           iSignes.reduce((s, r) => s + num(r.fields[F.CAPEX_HT]), 0),
+          kwc:             iSignes.reduce((s, r) => s + num(r.fields[F.KWC]), 0),
+          poses:           iPoses.length,
+          taux_pose:       iSignes.length ? Math.round(iPoses.length / iSignes.length * 100) : 0,
+          duree_f2_moy:    avg(iPoses.map(r => num(r.fields[F.DUREE_F2_J])).filter(v => v > 0)),
+          monthly:         buildMonthly(instRecs, recentMonths),
+        }
+      }).sort((a, b) => b.signes - a.signes)
+
+      return {
+        nom,
+        signes:          signesRecs.length,
+        annules:         annulesRecs.length,
+        taux_annulation: filteredRecs.length ? Math.round(annulesRecs.length / filteredRecs.length * 100) : 0,
+        capex:           signesRecs.reduce((s, r) => s + num(r.fields[F.CAPEX_HT]), 0),
+        kwc:             signesRecs.reduce((s, r) => s + num(r.fields[F.KWC]), 0),
+        poses:           posesRecs.length,
+        taux_pose:       signesRecs.length ? Math.round(posesRecs.length / signesRecs.length * 100) : 0,
+        abo_moyen:       avg(signesRecs.map(r => num(r.fields[F.ABONNEMENT_KPI])).filter(v => v > 0)),
+        duree_f2_moy:    avg(posesRecs.map(r => num(r.fields[F.DUREE_F2_J])).filter(v => v > 0)),
+        tendance_signes: curRecs.length - prevRecs.length,
+        tendance_capex:  curRecs.reduce((s, r) => s + num(r.fields[F.CAPEX_HT]), 0)
+                       - prevRecs.reduce((s, r) => s + num(r.fields[F.CAPEX_HT]), 0),
+        monthly:         buildMonthly(recs, recentMonths),
+        installateurs,
+      }
+    }).sort((a, b) => b.signes - a.signes)
+
+    // ─── Par installateur (vue globale) ──────────────────────────────────────
+    const instMapGlobal = new Map<string, Rec[]>()
+    for (const r of avecContrat) {
       const inst = str(r.fields[F.INSTALLATEUR_NOM]) || 'Non renseigné'
-      if (!instMap.has(inst)) instMap.set(inst, { signes: [], annules: [], poses: [] })
-      const e = instMap.get(inst)!
-      if (str(r.fields[F.STATUT_ABONNE]) === 'Annulé') {
-        e.annules.push(r)
-      } else {
-        e.signes.push(r)
-        if (str(r.fields[F.ETAT_F2]) === 'Validée') e.poses.push(r)
+      if (!instMapGlobal.has(inst)) instMapGlobal.set(inst, [])
+      instMapGlobal.get(inst)!.push(r)
+    }
+
+    const par_installateur: InstRow[] = Array.from(instMapGlobal.entries()).map(([nom, recs]) => {
+      const filtRecs  = mois
+        ? recs.filter(r => str(r.fields[F.MOIS_SIGNATURE]) === mois)
+        : annee
+          ? recs.filter(r => str(r.fields[F.MOIS_SIGNATURE]).startsWith(annee))
+          : recs
+      const signes  = filtRecs.filter(r => !isAnnule(r))
+      const annules = filtRecs.filter(r => isAnnule(r))
+      const poses   = signes.filter(r => isPose(r))
+      return {
+        nom,
+        signes:          signes.length,
+        annules:         annules.length,
+        taux_annulation: filtRecs.length ? Math.round(annules.length / filtRecs.length * 100) : 0,
+        capex:           signes.reduce((s, r) => s + num(r.fields[F.CAPEX_HT]), 0),
+        kwc:             signes.reduce((s, r) => s + num(r.fields[F.KWC]), 0),
+        poses:           poses.length,
+        taux_pose:       signes.length ? Math.round(poses.length / signes.length * 100) : 0,
+        duree_f2_moy:    avg(poses.map(r => num(r.fields[F.DUREE_F2_J])).filter(v => v > 0)),
+        monthly:         buildMonthly(recs, recentMonths),
       }
-    }
+    }).sort((a, b) => b.signes - a.signes)
 
-    const par_installateur = Array.from(instMap.entries())
-      .map(([nom, { signes, annules, poses }]) => ({
-        nom,
-        signes:       signes.length,
-        annules:      annules.length,
-        taux_annulation: signes.length + annules.length
-          ? Math.round(annules.length / (signes.length + annules.length) * 100) : 0,
-        capex:        signes.reduce((s, r) => s + num(r.fields[F.CAPEX_HT]), 0),
-        kwc:          signes.reduce((s, r) => s + num(r.fields[F.KWC]), 0),
-        poses:        poses.length,
-        taux_pose:    signes.length ? Math.round(poses.length / signes.length * 100) : 0,
-        duree_f2_moy: avg(poses.map(r => num(r.fields[F.DUREE_F2_J])).filter(v => v > 0)),
-      }))
-      .sort((a, b) => b.signes - a.signes)
-
-    // ─── Par masteur ───────────────────────────────────────────────────────
-    const mastMap = new Map<string, { signes: Rec[]; poses: Rec[] }>()
-    const signesOnly = filteredAll.filter(r => str(r.fields[F.STATUT_ABONNE]) !== 'Annulé')
-    for (const r of signesOnly) {
-      const mast = str(r.fields[F.MASTEUR]) || 'Non renseigné'
-      if (!mastMap.has(mast)) mastMap.set(mast, { signes: [], poses: [] })
-      mastMap.get(mast)!.signes.push(r)
-      if (str(r.fields[F.ETAT_F2]) === 'Validée') mastMap.get(mast)!.poses.push(r)
-    }
-
-    const par_masteur = Array.from(mastMap.entries())
-      .map(([nom, { signes, poses }]) => ({
-        nom,
-        signes:    signes.length,
-        capex:     signes.reduce((s, r) => s + num(r.fields[F.CAPEX_HT]), 0),
-        kwc:       signes.reduce((s, r) => s + num(r.fields[F.KWC]), 0),
-        poses:     poses.length,
-        taux_pose: signes.length ? Math.round(poses.length / signes.length * 100) : 0,
-      }))
-      .sort((a, b) => b.signes - a.signes)
-
-    // ─── Par segmentation installateur ─────────────────────────────────────
+    // ─── Par segmentation installateur ───────────────────────────────────────
     const par_segmentation: Record<string, number> = {}
-    for (const r of signesOnly) {
+    const signesGlobal = filtered.filter(r => !isAnnule(r))
+    for (const r of signesGlobal) {
       const seg = str(r.fields[F.SEGMENTATION_INST]) || 'Non renseigné'
       par_segmentation[seg] = (par_segmentation[seg] || 0) + 1
     }
 
-    // ─── Apporteurs d'affaire ──────────────────────────────────────────────
-    const avecApporteur = signesOnly.filter(r => r.fields[F.APPORTEUR] === true).length
-    const sansApporteur = signesOnly.length - avecApporteur
+    const apporteurs = {
+      avec: signesGlobal.filter(r => r.fields[F.APPORTEUR] === true).length,
+      sans: signesGlobal.filter(r => r.fields[F.APPORTEUR] !== true).length,
+    }
 
-    // ─── Métriques globales ────────────────────────────────────────────────
-    const total_annules = filteredAll.filter(r => str(r.fields[F.STATUT_ABONNE]) === 'Annulé').length
-    const total_signes  = filteredAll.length - total_annules
+    const total_annules_global = filtered.filter(r => isAnnule(r)).length
+    const total_signes_global  = filtered.filter(r => !isAnnule(r)).length
 
     return NextResponse.json({
+      months:          recentMonths,
+      month_labels:    recentMonths.map(monthLabel),
       par_commercial,
       par_installateur,
-      par_masteur,
       par_segmentation,
-      apporteurs: { avec: avecApporteur, sans: sansApporteur },
+      apporteurs,
       meta: {
-        total_signes,
-        total_annules,
-        taux_annulation_global: filteredAll.length
-          ? Math.round(total_annules / filteredAll.length * 100) : 0,
-        total_commerciaux:    par_commercial.filter(c => c.nom !== 'Non assigné').length,
-        total_installateurs:  par_installateur.filter(i => i.nom !== 'Non renseigné').length,
-        last_updated: new Date().toISOString(),
+        total_signes:          total_signes_global,
+        total_annules:         total_annules_global,
+        taux_annulation_global: filtered.length ? Math.round(total_annules_global / filtered.length * 100) : 0,
+        total_commerciaux:     par_commercial.filter(c => c.nom !== 'Non assigné').length,
+        total_installateurs:   par_installateur.filter(i => i.nom !== 'Non renseigné').length,
+        cur_mois:              curMois,
+        prev_mois:             prevMois,
+        last_updated:          new Date().toISOString(),
       }
     })
   } catch (e) {
