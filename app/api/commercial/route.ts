@@ -147,8 +147,8 @@ export async function GET(req: Request) {
     const curMois = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
     const prevMois = allMonths[allMonths.indexOf(curMois) - 1] || allMonths[allMonths.length - 2] || ''
 
-    function isAnnule(r: Rec) { return str(r.fields[F.STATUT_ABONNE]) === 'Annulé' }
-    function isPose(r: Rec)   { return str(r.fields[F.ETAT_F2]) === 'Validée' }
+    const isAnnule = (r: Rec) => str(r.fields[F.STATUT_ABONNE]) === 'Annulé'
+    const isPose   = (r: Rec) => str(r.fields[F.ETAT_F2]) === 'Validée'
 
     // ─── Builder helper ─────────────────────────────────────────────────────
     function buildMonthly(recs: Rec[], months: string[]): MonthlyRow[] {
