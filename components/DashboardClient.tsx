@@ -145,7 +145,6 @@ export default function DashboardClient() {
       await fetch('/api/snapshot', { method: 'POST' })
       const res  = await fetch('/api/snapshot')
       const json = await res.json()
-      // Toujours mettre à jour le log, même si vide
       setLog(json.changelog ?? [])
       alert('Snapshot créé ✓')
     } catch { alert('Erreur snapshot') }
@@ -184,6 +183,7 @@ export default function DashboardClient() {
             <span className="font-semibold text-gray-900 text-sm">SunLib KPIs</span>
           </div>
 
+          {/* Filtres */}
           <div className="flex items-center gap-2 flex-1 flex-wrap">
             <select value={segment}
               onChange={e => applyFilter(e.target.value as Segment, typeInstall, annee)}
@@ -211,13 +211,15 @@ export default function DashboardClient() {
             </select>
           </div>
 
+          {/* Actions */}
           <div className="flex items-center gap-2">
             {data && (
               <span className="text-xs text-gray-400 hidden sm:block">
                 {data.total_records} records · {new Date(data.last_updated).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}
               </span>
             )}
-            {/* Bouton Journal avec badge non lus */}
+
+            {/* Bouton Journal */}
             <button onClick={() => setShowLog(!showLog)}
               className="relative text-sm px-3 py-1.5 border border-gray-200 rounded-lg hover:bg-gray-50">
               📋 Journal
@@ -227,10 +229,20 @@ export default function DashboardClient() {
                 </span>
               )}
             </button>
+
+            {/* Bouton Snapshot */}
             <button onClick={snapshot} disabled={refreshing}
               className="text-sm px-3 py-1.5 border border-gray-200 rounded-lg hover:bg-gray-50 disabled:opacity-50">
               {refreshing ? '⏳' : '📸'} Snapshot
             </button>
+
+            {/* ← Bouton Commercial */}
+            <a href="/commercial"
+              className="text-sm px-3 py-1.5 bg-blue-50 border border-blue-200 rounded-lg hover:bg-blue-100 text-blue-700 font-medium">
+              👥 Commercial
+            </a>
+
+            {/* Déconnexion */}
             <button onClick={logout}
               className="text-sm px-3 py-1.5 text-gray-500 hover:text-gray-700">
               Déco
@@ -258,7 +270,7 @@ export default function DashboardClient() {
 
         {!loading && !error && g && (
           <>
-            {/* Ligne 1 — volumes */}
+            {/* Ligne 1 */}
             <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-3">
               <KPICard label="Contrats signés"  value={g.total_signes}     icon="📝" />
               <KPICard label="Poses réalisées"   value={g.total_poses}      icon="🔧"
@@ -268,12 +280,12 @@ export default function DashboardClient() {
                 sub={`${Math.round(g.mandats_signes / Math.max(g.mandats_total, 1) * 100)}% signés`} />
             </div>
 
-            {/* Ligne 2 — financier */}
+            {/* Ligne 2 */}
             <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-5">
-              <KPICard label="CAPEX signé"       value={g.total_capex_signes} icon="💶" currency />
-              <KPICard label="CAPEX posé"        value={g.total_capex_poses}  icon="💰" currency />
-              <KPICard label="Abo. moyen"        value={g.moy_abonnement}     icon="📊" currency />
-              <KPICard label="Durée moy. F2"     value={g.moy_duree_f2}       unit=" j" icon="⏱️"
+              <KPICard label="CAPEX signé"   value={g.total_capex_signes} icon="💶" currency />
+              <KPICard label="CAPEX posé"    value={g.total_capex_poses}  icon="💰" currency />
+              <KPICard label="Abo. moyen"    value={g.moy_abonnement}     icon="📊" currency />
+              <KPICard label="Durée moy. F2" value={g.moy_duree_f2}       unit=" j" icon="⏱️"
                 sub="Sig. → Pose validée" decimals={1} />
             </div>
 
@@ -314,7 +326,6 @@ export default function DashboardClient() {
       {/* Panneau Journal */}
       {showLog && (
         <div className="fixed inset-y-0 right-0 w-96 max-w-full bg-white border-l border-gray-200 shadow-xl z-20 flex flex-col">
-          {/* En-tête avec bouton "Marquer comme lu" */}
           <div className="flex items-center justify-between p-4 border-b">
             <div className="flex items-center gap-2">
               <h2 className="font-semibold text-gray-900">Journal</h2>
