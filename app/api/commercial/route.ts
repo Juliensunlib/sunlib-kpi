@@ -138,7 +138,7 @@ export async function GET(req: Request) {
     }
 
     // Tous les mois disponibles (triés)
-    const allMonths = [...new Set(avecContrat.map(r => str(r.fields[F.MOIS_SIGNATURE])).filter(Boolean))]
+    const allMonths = Array.from(new Set(avecContrat.map(r => str(r.fields[F.MOIS_SIGNATURE])).filter(Boolean)))
       .sort()
     const recentMonths = allMonths.slice(-12)
 
