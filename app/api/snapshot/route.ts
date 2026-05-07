@@ -332,7 +332,7 @@ async function saveSnapshot(data: SnapshotData, changes: ChangeEntry[]): Promise
   const body = {
     records: [{
       fields: {
-        snapshot_date: new Date().toISOString().substring(0, 10),
+        snapshot_date: new Date().toISOString(),
         snapshot_data: JSON.stringify(data),
         changes:       JSON.stringify(changes),
         triggered_by:  'dashboard',
@@ -356,7 +356,7 @@ export async function GET() {
       try {
         const entries: ChangeEntry[] = JSON.parse(s.fields.changes as string || '[]')
         if (Array.isArray(entries) && entries.length > 0) {
-          changelog.push({ date: s.fields.snapshot_date as string, entries })
+          changelog.push({ date: (s.fields.snapshot_date as string).substring(0, 10), entries })
         }
       } catch { /* snapshot malformé */ }
     }
