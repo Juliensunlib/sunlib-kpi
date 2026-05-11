@@ -185,7 +185,7 @@ function buildPipelineItems(recs: Rec[]): PipelineItem[] {
     .filter(r => {
       const de = strVal(r.fields[F.DATE_EDITION])
       const dc = strVal(r.fields[F.DATE_CREATION])
-      return isWithin30Days(de) || isWithin30Days(dc)
+      return isWithin30Days(de)  // uniquement Date édition contrat
     })
     .map(r => {
       const dateSig  = strVal(r.fields[F.DATE_SIGNATURE])
