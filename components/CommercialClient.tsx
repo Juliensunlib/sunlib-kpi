@@ -54,6 +54,11 @@ function Th({ label, k, col, dir, onSort }: { label: string; k: string; col: str
 
 function PctBar({ v, max, color = 'bg-blue-400' }: { v: number; max: number; color?: string }) {
   const pct = max ? Math.min(Math.round(v / max * 100), 100) : 0
+  return <div className="flex items-center gap-2"><div className="flex-1 h-1.5 bg-gray-100 rounded-full" style={{ minWidth: 40 }}><div className={`h-1.5 rounded-full ${color}`} style={{ width: `${pct}%` }} /></div></div>
+}
+
+function PctBarCount({ v, max, color = 'bg-blue-400' }: { v: number; max: number; color?: string }) {
+  const pct = max ? Math.min(Math.round(v / max * 100), 100) : 0
   return <div className="flex items-center gap-2"><span className="text-sm font-medium text-gray-800 w-6 text-right">{v}</span><div className="flex-1 h-1.5 bg-gray-100 rounded-full" style={{ minWidth: 40 }}><div className={`h-1.5 rounded-full ${color}`} style={{ width: `${pct}%` }} /></div></div>
 }
 
@@ -314,7 +319,7 @@ function ComPanel({ com, months, onClose }: { com: ComRow; months: string[]; onC
                     {instForMonth.map((inst, i) => (
                       <tr key={i} onClick={() => setSel(com.installateurs.find(ci => ci.nom === inst.nom) || null)} className="hover:bg-blue-50 cursor-pointer transition-colors">
                         <td className="px-3 py-2">
-                          <PctBar v={inst.signes} max={selMonth ? maxInstMonth : maxInst} color="bg-amber-400" />
+                          <PctBarCount v={inst.signes} max={selMonth ? maxInstMonth : maxInst} color="bg-amber-400" />
                           <p className="text-xs text-gray-600 mt-0.5 truncate max-w-[160px]">{inst.nom}</p>
                         </td>
                         <td className="px-3 py-2 font-medium text-gray-800">{inst.signes}</td>
@@ -390,7 +395,7 @@ export default function CommercialClient() {
   }, [data, search, instSort.col, instSort.dir])
 
   const allMonths = useMemo(() => data?.months.map((m, i) => ({ v: m, l: data.month_labels[i] })) || [], [data])
-  const top3      = data?.par_commercial.filter(c => c.nom !== 'Non assigné').slice(0, 3) || []
+  const top3 = [...(data?.par_commercial.filter(c => c.nom !== 'Non assigné') || [])].sort((a, b) => b.capex - a.capex).slice(0, 3)
 
   const views: { id: ViewType; label: string }[] = [
     { id: 'leaderboard',   label: '🏆 Leaderboard'    },
@@ -407,7 +412,6 @@ export default function CommercialClient() {
             <div className="w-7 h-7 bg-blue-600 rounded-lg flex items-center justify-center"><span className="text-white text-sm">👥</span></div>
             <span className="font-semibold text-gray-900 text-sm">CRM Commercial</span>
           </div>
-
           <select value={annee} onChange={e => { setAnnee(e.target.value); setMois(''); load(e.target.value, '') }}
             className="text-sm border border-gray-200 rounded-lg px-3 py-1.5 bg-white">
             <option value="">Toutes années</option>
@@ -415,13 +419,11 @@ export default function CommercialClient() {
             <option value="2025">2025</option>
             <option value="2026">2026</option>
           </select>
-
           <select value={mois} onChange={e => { setMois(e.target.value); setAnnee(''); load('', e.target.value) }}
             className="text-sm border border-gray-200 rounded-lg px-3 py-1.5 bg-white">
             <option value="">Tous les mois</option>
             {allMonths.map(m => <option key={m.v} value={m.v}>{m.l}</option>)}
           </select>
-
           <div className="flex bg-gray-100 rounded-lg p-1 gap-1">
             {views.map(v => (
               <button key={v.id} onClick={() => setView(v.id)}
@@ -471,37 +473,52 @@ export default function CommercialClient() {
             {/* ── LEADERBOARD ── */}
             {view === 'leaderboard' && (
               <div className="space-y-4">
+                {/* Podium — trié par CAPEX */}
                 {top3.length >= 2 && (
                   <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
-                    <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wider mb-5">🏆 Top performers</h2>
+                    <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wider mb-5">🏆 Top performers — CAPEX</h2>
                     <div className="flex items-end justify-center gap-6">
                       {top3[1] && (
                         <div className="flex flex-col items-center gap-2 cursor-pointer" onClick={() => setSelCom(top3[1])}>
                           <Avatar nom={top3[1].nom} size={14} />
-                          <div className="text-center"><p className="text-xs text-gray-500">{top3[1].nom.split(' ')[0]}</p><p className="font-bold text-xl text-gray-800">{top3[1].signes}</p><p className="text-xs text-gray-400">{fmtK(top3[1].capex)}</p></div>
+                          <div className="text-center">
+                            <p className="text-xs text-gray-500">{top3[1].nom.split(' ')[0]}</p>
+                            <p className="font-bold text-xl text-gray-800">{fmtK(top3[1].capex)}</p>
+                            <p className="text-xs text-gray-400">{top3[1].signes} contrats</p>
+                          </div>
                           <div className="w-20 bg-gray-200 rounded-t-lg flex items-center justify-center text-2xl" style={{ height: 60 }}>🥈</div>
                         </div>
                       )}
                       {top3[0] && (
                         <div className="flex flex-col items-center gap-2 cursor-pointer" onClick={() => setSelCom(top3[0])}>
                           <div className="relative"><Avatar nom={top3[0].nom} size={18} /><span className="absolute -top-2 -right-2 text-xl">👑</span></div>
-                          <div className="text-center"><p className="text-sm text-gray-600 font-medium">{top3[0].nom.split(' ')[0]}</p><p className="font-bold text-3xl text-gray-900">{top3[0].signes}</p><p className="text-sm text-gray-500">{fmtK(top3[0].capex)}</p></div>
+                          <div className="text-center">
+                            <p className="text-sm text-gray-600 font-medium">{top3[0].nom.split(' ')[0]}</p>
+                            <p className="font-bold text-3xl text-gray-900">{fmtK(top3[0].capex)}</p>
+                            <p className="text-sm text-gray-500">{top3[0].signes} contrats</p>
+                          </div>
                           <div className="w-24 bg-amber-400 rounded-t-lg flex items-center justify-center text-2xl" style={{ height: 80 }}>🥇</div>
                         </div>
                       )}
                       {top3[2] && (
                         <div className="flex flex-col items-center gap-2 cursor-pointer" onClick={() => setSelCom(top3[2])}>
                           <Avatar nom={top3[2].nom} size={12} />
-                          <div className="text-center"><p className="text-xs text-gray-500">{top3[2].nom.split(' ')[0]}</p><p className="font-bold text-lg text-gray-800">{top3[2].signes}</p><p className="text-xs text-gray-400">{fmtK(top3[2].capex)}</p></div>
+                          <div className="text-center">
+                            <p className="text-xs text-gray-500">{top3[2].nom.split(' ')[0]}</p>
+                            <p className="font-bold text-lg text-gray-800">{fmtK(top3[2].capex)}</p>
+                            <p className="text-xs text-gray-400">{top3[2].signes} contrats</p>
+                          </div>
                           <div className="w-16 bg-orange-300 rounded-t-lg flex items-center justify-center text-2xl" style={{ height: 45 }}>🥉</div>
                         </div>
                       )}
                     </div>
                   </div>
                 )}
+
+                {/* Tableau leaderboard */}
                 <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
                   <div className="px-5 py-4 border-b border-gray-100 flex items-center justify-between">
-                    <div><h2 className="font-semibold text-gray-900">Classement commerciaux</h2><p className="text-xs text-gray-400 mt-0.5">Cliquez sur une ligne pour voir le détail</p></div>
+                    <div><h2 className="font-semibold text-gray-900">Classement commerciaux</h2><p className="text-xs text-gray-400 mt-0.5">Trié par CAPEX · Cliquez pour voir le détail</p></div>
                     <span className="text-xs text-gray-400">{data.par_commercial.length} commerciaux</span>
                   </div>
                   <div className="overflow-x-auto">
@@ -510,9 +527,9 @@ export default function CommercialClient() {
                         <tr>
                           <th className="px-4 py-3 text-left text-xs font-semibold text-gray-400 w-10">#</th>
                           <th className="px-4 py-3 text-left text-xs font-semibold text-gray-400">Commercial</th>
-                          <Th label="Volume"     k="signes"                       col={comSort.col} dir={comSort.dir} onSort={comSort.toggle} />
+                          <Th label="CAPEX HT"   k="capex"                        col={comSort.col} dir={comSort.dir} onSort={comSort.toggle} />
                           <th className="px-4 py-3 text-center text-xs font-semibold text-gray-400">Tendance</th>
-                          <Th label="CAPEX"      k="capex"                        col={comSort.col} dir={comSort.dir} onSort={comSort.toggle} />
+                          <Th label="Signés"     k="signes"                       col={comSort.col} dir={comSort.dir} onSort={comSort.toggle} />
                           <Th label="Annulés"    k="annules"                      col={comSort.col} dir={comSort.dir} onSort={comSort.toggle} />
                           <Th label="Taux pose"  k="taux_pose"                    col={comSort.col} dir={comSort.dir} onSort={comSort.toggle} />
                           <Th label="Délai sig." k="delai_moy_creation_signature" col={comSort.col} dir={comSort.dir} onSort={comSort.toggle} />
@@ -527,12 +544,22 @@ export default function CommercialClient() {
                             <td className="px-4 py-3">
                               <div className="flex items-center gap-2.5">
                                 <Avatar nom={com.nom} size={8} />
-                                <div><p className="font-medium text-gray-900 text-sm">{com.nom}</p><p className="text-xs text-gray-400">{com.abo_moyen > 0 ? `Abo. moy. ${fmtFull(com.abo_moyen)}` : '—'}</p></div>
+                                <div>
+                                  <p className="font-medium text-gray-900 text-sm">{com.nom}</p>
+                                  <p className="text-xs text-gray-400">{com.abo_moyen > 0 ? `Abo. moy. ${fmtFull(com.abo_moyen)}` : '—'}</p>
+                                </div>
                               </div>
                             </td>
-                            <td className="px-4 py-3"><PctBar v={com.signes} max={maxCom} color={i < 3 ? 'bg-amber-400' : 'bg-blue-400'} /></td>
+                            {/* ← Colonne CAPEX avec barre de progression */}
+                            <td className="px-4 py-3">
+                              <PctBar v={com.capex} max={maxCom} color={i < 3 ? 'bg-amber-400' : 'bg-blue-400'} />
+                              <p className="text-sm font-semibold text-gray-800 mt-0.5">{fmtK(com.capex)}</p>
+                            </td>
                             <td className="px-4 py-3 text-center"><Trend v={com.tendance_signes} /></td>
-                            <td className="px-4 py-3 font-semibold text-gray-800 text-sm">{fmtK(com.capex)}</td>
+                            {/* ← Colonne Signés en secondaire */}
+                            <td className="px-4 py-3 text-gray-700 text-sm">
+                              {com.signes} <span className="text-xs text-gray-400">contrats</span>
+                            </td>
                             <td className="px-4 py-3 text-center">{com.annules > 0 ? <span className="text-red-500 font-medium text-sm">{com.annules} <span className="text-red-400 text-xs">({com.taux_annulation}%)</span></span> : <span className="text-gray-300 text-sm">—</span>}</td>
                             <td className="px-4 py-3 text-center"><TauxPose v={com.taux_pose} /></td>
                             <td className="px-4 py-3 text-center text-sm text-gray-600">{com.delai_moy_creation_signature > 0 ? `${com.delai_moy_creation_signature}j` : '—'}</td>
@@ -588,7 +615,7 @@ export default function CommercialClient() {
                           <tr key={pipe.nom} onClick={() => setSelPipe(pipe)} className="hover:bg-indigo-50 cursor-pointer transition-colors">
                             <td className="px-4 py-3 text-gray-400 text-xs">{i + 1}</td>
                             <td className="px-4 py-3"><div className="flex items-center gap-2"><Avatar nom={pipe.nom} size={8} /><span className="font-medium text-gray-900 text-sm">{pipe.nom}</span></div></td>
-                            <td className="px-4 py-3"><PctBar v={pipe.total_pipe} max={maxPipe} color="bg-indigo-400" /></td>
+                            <td className="px-4 py-3"><PctBarCount v={pipe.total_pipe} max={maxPipe} color="bg-indigo-400" /></td>
                             <td className="px-4 py-3" style={{ minWidth: 120 }}>
                               <div className="h-2 bg-gray-100 rounded-full"><div className="h-2 bg-indigo-500 rounded-full" style={{ width: `${pipe.total_pipe ? Math.round(pipe.signes_pipe / pipe.total_pipe * 100) : 0}%` }} /></div>
                               <p className="text-xs text-gray-400 mt-0.5">{pipe.signes_pipe}/{pipe.total_pipe}</p>
@@ -688,7 +715,7 @@ export default function CommercialClient() {
                         <tr key={inst.nom} className="hover:bg-amber-50 transition-colors">
                           <td className="px-3 py-2.5 text-gray-400 text-xs">{i + 1}</td>
                           <td className="px-3 py-2.5 font-medium text-gray-800 truncate max-w-[200px]">{inst.nom}</td>
-                          <td className="px-3 py-2.5"><PctBar v={inst.signes} max={maxInst} color="bg-amber-400" /></td>
+                          <td className="px-3 py-2.5"><PctBarCount v={inst.signes} max={maxInst} color="bg-amber-400" /></td>
                           <td className="px-3 py-2.5"><span className={`font-medium ${inst.annules > 0 ? 'text-red-500' : 'text-gray-300'}`}>{inst.annules}</span></td>
                           <td className="px-3 py-2.5"><span className={`text-sm font-medium ${inst.taux_annulation > 20 ? 'text-red-500' : inst.taux_annulation > 10 ? 'text-orange-500' : 'text-gray-400'}`}>{inst.taux_annulation}%</span></td>
                           <td className="px-3 py-2.5 font-medium text-gray-700">{fmtK(inst.capex)}</td>
