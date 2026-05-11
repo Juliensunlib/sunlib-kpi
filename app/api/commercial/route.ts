@@ -95,8 +95,9 @@ interface PipelineItem {
 }
 
 interface PipelineRow {
-  nom: string; total_pipe: number; signes_pipe: number; taux_conversion: number
-  capex_pipe: number; kwc_pipe: number; capex_signe: number; kwc_signe: number
+  nom: string; total_pipe: number; signes_pipe: number; en_cours_pipe: number
+  taux_conversion: number; capex_pipe: number; kwc_pipe: number
+  capex_signe: number; kwc_signe: number; capex_en_cours: number; kwc_en_cours: number
   delai_moy: number; items: PipelineItem[]
 }
 
@@ -320,17 +321,21 @@ export async function GET(req: Request) {
     // ─── Pipeline 30j par commercial ──────────────────────────────────────────
     const pipeline_par_commercial: PipelineRow[] = Array.from(comMap.entries()).map(([nom, recs]) => {
       const items   = buildPipelineItems(recs)
-      const signesP = items.filter(i => i.signe)
-      const delais  = items.filter(i => i.signe && i.delai_creation_signature >= 0).map(i => i.delai_creation_signature)
+      const signesP   = items.filter(i => i.signe)
+      const enCoursP  = items.filter(i => !i.signe)
+      const delais    = items.filter(i => i.signe && i.delai_creation_signature >= 0).map(i => i.delai_creation_signature)
       return {
         nom,
         total_pipe:      items.length,
         signes_pipe:     signesP.length,
+        en_cours_pipe:   enCoursP.length,
         taux_conversion: items.length ? Math.round(signesP.length / items.length * 100) : 0,
         capex_pipe:      items.reduce((s, i) => s + i.capex, 0),
         kwc_pipe:        items.reduce((s, i) => s + i.kwc, 0),
         capex_signe:     signesP.reduce((s, i) => s + i.capex, 0),
         kwc_signe:       signesP.reduce((s, i) => s + i.kwc, 0),
+        capex_en_cours:  enCoursP.reduce((s, i) => s + i.capex, 0),
+        kwc_en_cours:    enCoursP.reduce((s, i) => s + i.kwc, 0),
         delai_moy:       delais.length ? Math.round(avgArr(delais)) : 0,
         items,
       }
@@ -388,14 +393,18 @@ export async function GET(req: Request) {
       par_installateur,
       par_segmentation,
       pipeline_par_commercial,
+      const allPipeEnCours = allPipeItems.filter(i => !i.signe)
       pipeline_global: {
-        total:           allPipeItems.length,
-        signes:          allPipeSigned.length,
-        taux_conversion: allPipeItems.length ? Math.round(allPipeSigned.length / allPipeItems.length * 100) : 0,
-        capex_pipe:      allPipeItems.reduce((s, i) => s + i.capex, 0),
-        capex_signe:     allPipeSigned.reduce((s, i) => s + i.capex, 0),
-        kwc_pipe:        allPipeItems.reduce((s, i) => s + i.kwc, 0),
-        kwc_signe:       allPipeSigned.reduce((s, i) => s + i.kwc, 0),
+        total:            allPipeItems.length,
+        signes:           allPipeSigned.length,
+        en_cours:         allPipeEnCours.length,
+        taux_conversion:  allPipeItems.length ? Math.round(allPipeSigned.length / allPipeItems.length * 100) : 0,
+        capex_pipe:       allPipeItems.reduce((s, i) => s + i.capex, 0),
+        capex_signe:      allPipeSigned.reduce((s, i) => s + i.capex, 0),
+        capex_en_cours:   allPipeEnCours.reduce((s, i) => s + i.capex, 0),
+        kwc_pipe:         allPipeItems.reduce((s, i) => s + i.kwc, 0),
+        kwc_signe:        allPipeSigned.reduce((s, i) => s + i.kwc, 0),
+        kwc_en_cours:     allPipeEnCours.reduce((s, i) => s + i.kwc, 0),
       },
       apporteurs: {
         avec: signesGlobal.filter(r => r.fields[F.APPORTEUR] === true).length,
