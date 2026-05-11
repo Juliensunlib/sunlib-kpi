@@ -4,7 +4,7 @@ import { useState, useEffect, useMemo } from 'react'
 // ─── Types ────────────────────────────────────────────────────────────────────
 interface MonthlyRow { month: string; label: string; signes: number; annules: number; capex: number; kwc: number; poses: number }
 interface PipelineItem { id: string; nom_abonne: string; installateur: string; segment: string; capex: number; kwc: number; date_creation: string; date_edition: string; date_signature: string; signe: boolean; statut: string; statut_dossier: string; delai_creation_signature: number }
-interface PipelineRow { nom: string; total_pipe: number; signes_pipe: number; taux_conversion: number; capex_pipe: number; kwc_pipe: number; capex_signe: number; kwc_signe: number; delai_moy: number; items: PipelineItem[] }
+interface PipelineRow { nom: string; total_pipe: number; signes_pipe: number; en_cours_pipe: number; taux_conversion: number; capex_pipe: number; kwc_pipe: number; capex_signe: number; kwc_signe: number; capex_en_cours: number; kwc_en_cours: number; delai_moy: number; items: PipelineItem[] }
 interface InstRow { nom: string; signes: number; annules: number; taux_annulation: number; capex: number; kwc: number; poses: number; taux_pose: number; duree_f2_moy: number; delai_moy_creation_signature: number; monthly: MonthlyRow[] }
 interface ComRow { nom: string; signes: number; annules: number; taux_annulation: number; capex: number; kwc: number; poses: number; taux_pose: number; abo_moyen: number; duree_f2_moy: number; tendance_signes: number; tendance_capex: number; delai_moy_creation_signature: number; monthly: MonthlyRow[]; installateurs: InstRow[] }
 interface ApiData {
@@ -12,7 +12,7 @@ interface ApiData {
   par_commercial: ComRow[]; par_installateur: InstRow[]
   par_segmentation: Record<string, number>
   pipeline_par_commercial: PipelineRow[]
-  pipeline_global: { total: number; signes: number; taux_conversion: number; capex_pipe: number; capex_signe: number; kwc_pipe: number; kwc_signe: number }
+  pipeline_global: { total: number; signes: number; en_cours: number; taux_conversion: number; capex_pipe: number; capex_signe: number; capex_en_cours: number; kwc_pipe: number; kwc_signe: number; kwc_en_cours: number }
   apporteurs: { avec: number; sans: number }
   meta: { total_signes: number; total_annules: number; taux_annulation_global: number; total_commerciaux: number; total_installateurs: number }
 }
@@ -380,7 +380,7 @@ export default function CommercialClient() {
 
   const maxCom  = useMemo(() => Math.max(...(data?.par_commercial.map(c => c.capex)  || [1]), 1), [data])
   const maxInst = useMemo(() => Math.max(...(data?.par_installateur.map(i => i.signes) || [1]), 1), [data])
-  const maxPipe = useMemo(() => Math.max(...(data?.pipeline_par_commercial.map(p => p.total_pipe) || [1]), 1), [data])
+  const maxPipe = useMemo(() => Math.max(...(data?.pipeline_par_commercial.map(p => p.en_cours_pipe) || [1]), 1), [data])
   const heatMax = useMemo(() => data ? Math.max(...data.par_commercial.flatMap(c => c.monthly.map(m => m.signes)), 1) : 1, [data])
 
   const filteredInstSorted = useMemo(() => {
@@ -460,7 +460,7 @@ export default function CommercialClient() {
                 { label: 'Annulés',              value: data.meta.total_annules,       sub: `Taux ${data.meta.taux_annulation_global}%`,       red: true  },
                 { label: 'Commerciaux actifs',   value: data.meta.total_commerciaux,   sub: '',                                               red: false },
                 { label: 'Installateurs actifs', value: data.meta.total_installateurs, sub: '',                                               red: false },
-                { label: 'Pipeline 30j',         value: data.pipeline_global.total,    sub: `${data.pipeline_global.signes} signés · ${data.pipeline_global.taux_conversion}% conv.`, red: false },
+                { label: 'Pipeline 30j',         value: data.pipeline_global.en_cours,    sub: `À signer · ${fmtK(data.pipeline_global.capex_en_cours)} CAPEX`, red: false },
               ].map(({ label, value, sub, red }) => (
                 <div key={label} className="kpi-card">
                   <p className="kpi-label">{label}</p>
@@ -579,10 +579,10 @@ export default function CommercialClient() {
               <div className="space-y-4">
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                   {[
-                    { label: 'Dossiers en pipe 30j', value: String(data.pipeline_global.total),            sub: 'créés ou édités'                                    },
-                    { label: 'Signés dans le pipe',  value: String(data.pipeline_global.signes),           sub: `Taux ${data.pipeline_global.taux_conversion}%`        },
-                    { label: 'CAPEX total du pipe',  value: fmtK(data.pipeline_global.capex_pipe),         sub: `${fmtK(data.pipeline_global.capex_signe)} signé`      },
-                    { label: 'kWc dans le pipe',     value: `${Math.round(data.pipeline_global.kwc_pipe)} kWc`, sub: `${Math.round(data.pipeline_global.kwc_signe)} kWc signés` },
+                    { label: 'À signer',             value: String(data.pipeline_global.en_cours),         sub: `${data.pipeline_global.total} dossiers au total`     },
+                    { label: 'CAPEX restant à signer',value: fmtK(data.pipeline_global.capex_en_cours),    sub: `${fmtK(data.pipeline_global.capex_signe)} déjà signé`},
+                    { label: 'Déjà signés',          value: String(data.pipeline_global.signes),           sub: `Taux ${data.pipeline_global.taux_conversion}%`        },
+                    { label: 'kWc à signer',         value: `${Math.round(data.pipeline_global.kwc_en_cours)} kWc`, sub: `${Math.round(data.pipeline_global.kwc_signe)} kWc signés` },
                   ].map(({ label, value, sub }) => (
                     <div key={label} className="kpi-card border-l-4 border-l-indigo-400">
                       <p className="kpi-label">{label}</p><p className="kpi-value">{value}</p>{sub && <p className="kpi-sub">{sub}</p>}
@@ -600,12 +600,12 @@ export default function CommercialClient() {
                         <tr>
                           <th className="px-4 py-3 text-left text-xs font-semibold text-gray-400 w-10">#</th>
                           <th className="px-4 py-3 text-left text-xs font-semibold text-gray-400">Commercial</th>
-                          <Th label="En pipe"     k="total_pipe"      col={pipeSort.col} dir={pipeSort.dir} onSort={pipeSort.toggle} />
+                          <Th label="À signer"    k="en_cours_pipe"
                           <th className="px-4 py-3 text-left text-xs font-semibold text-gray-400">Progression</th>
                           <Th label="Signés"      k="signes_pipe"     col={pipeSort.col} dir={pipeSort.dir} onSort={pipeSort.toggle} />
                           <Th label="Taux conv."  k="taux_conversion" col={pipeSort.col} dir={pipeSort.dir} onSort={pipeSort.toggle} />
-                          <Th label="CAPEX pipe"  k="capex_pipe"      col={pipeSort.col} dir={pipeSort.dir} onSort={pipeSort.toggle} />
-                          <Th label="CAPEX signé" k="capex_signe"     col={pipeSort.col} dir={pipeSort.dir} onSort={pipeSort.toggle} />
+                          <Th label="CAPEX à signer" k="capex_en_cours" col={pipeSort.col} dir={pipeSort.dir} onSort={pipeSort.toggle} />
+                          <Th label="CAPEX signé"    k="capex_signe"
                           <Th label="kWc"         k="kwc_signe"       col={pipeSort.col} dir={pipeSort.dir} onSort={pipeSort.toggle} />
                           <Th label="Délai moy."  k="delai_moy"       col={pipeSort.col} dir={pipeSort.dir} onSort={pipeSort.toggle} />
                         </tr>
@@ -615,11 +615,15 @@ export default function CommercialClient() {
                           <tr key={pipe.nom} onClick={() => setSelPipe(pipe)} className="hover:bg-indigo-50 cursor-pointer transition-colors">
                             <td className="px-4 py-3 text-gray-400 text-xs">{i + 1}</td>
                             <td className="px-4 py-3"><div className="flex items-center gap-2"><Avatar nom={pipe.nom} size={8} /><span className="font-medium text-gray-900 text-sm">{pipe.nom}</span></div></td>
-                            <td className="px-4 py-3"><PctBarCount v={pipe.total_pipe} max={maxPipe} color="bg-indigo-400" /></td>
+                            <td className="px-4 py-3"><PctBarCount v={pipe.en_cours_pipe} max={maxPipe} color="bg-orange-400" /></td>
                             <td className="px-4 py-3" style={{ minWidth: 120 }}>
                               <div className="h-2 bg-gray-100 rounded-full"><div className="h-2 bg-indigo-500 rounded-full" style={{ width: `${pipe.total_pipe ? Math.round(pipe.signes_pipe / pipe.total_pipe * 100) : 0}%` }} /></div>
-                              <p className="text-xs text-gray-400 mt-0.5">{pipe.signes_pipe}/{pipe.total_pipe}</p>
+                              <p className="text-xs text-gray-400 mt-0.5">{pipe.signes_pipe}/{pipe.total_pipe} signés</p>
                             </td>
+                            <td className="px-4 py-3 font-medium text-emerald-600">{pipe.signes_pipe}</td>
+                            <td className="px-4 py-3"><span className={`font-semibold text-sm ${pipe.taux_conversion >= 70 ? 'text-emerald-600' : pipe.taux_conversion >= 40 ? 'text-amber-600' : 'text-gray-400'}`}>{pipe.taux_conversion}%</span></td>
+                            <td className="px-4 py-3 font-bold text-orange-600">{fmtK(pipe.capex_en_cours)}</td>
+                            <td className="px-4 py-3 text-gray-600">{fmtK(pipe.capex_signe)}</td>
                             <td className="px-4 py-3 font-medium text-emerald-600">{pipe.signes_pipe}</td>
                             <td className="px-4 py-3"><span className={`font-semibold text-sm ${pipe.taux_conversion >= 70 ? 'text-emerald-600' : pipe.taux_conversion >= 40 ? 'text-amber-600' : 'text-gray-400'}`}>{pipe.taux_conversion}%</span></td>
                             <td className="px-4 py-3 text-gray-600">{fmtK(pipe.capex_pipe)}</td>
