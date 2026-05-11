@@ -183,11 +183,7 @@ function buildMonthly(recs: Rec[], months: string[]): MonthlyRow[] {
 
 function buildPipelineItems(recs: Rec[]): PipelineItem[] {
   return recs
-    .filter(r => {
-      const de = strVal(r.fields[F.DATE_EDITION])
-      const dc = strVal(r.fields[F.DATE_CREATION])
-      return isWithin30Days(de)  // uniquement Date édition contrat
-    })
+    .filter(r => isWithin30Days(strVal(r.fields[F.DATE_EDITION])))
     .map(r => {
       const dateSig  = strVal(r.fields[F.DATE_SIGNATURE])
       const dateCrea = strVal(r.fields[F.DATE_CREATION])
@@ -207,7 +203,7 @@ function buildPipelineItems(recs: Rec[]): PipelineItem[] {
         delai_creation_signature: dateSig && dateCrea ? daysBetween(dateCrea, dateSig) : -1,
       }
     })
-    .sort((a, b) => (b.date_edition || b.date_creation).localeCompare(a.date_edition || a.date_creation))
+    .sort((a, b) => b.date_edition.localeCompare(a.date_edition))
 }
 
 export async function GET(req: Request) {
@@ -225,20 +221,17 @@ export async function GET(req: Request) {
         ? avecContrat.filter(r => strVal(r.fields[F.MOIS_SIGNATURE]).startsWith(annee))
         : avecContrat
 
-    // Tous les mois disponibles
     const allMonths = Array.from(
       new Set(avecContrat.map(r => strVal(r.fields[F.MOIS_SIGNATURE])).filter(Boolean))
     ).sort()
     const recentMonths = allMonths.slice(-12)
 
-    // ← CLEF : mois à afficher selon la période sélectionnée
     const filteredMonths = mois
       ? [mois]
       : annee
         ? allMonths.filter(m => m.startsWith(annee))
         : recentMonths
 
-    // Mois courant/précédent pour tendances (toujours sur données réelles)
     const now      = new Date()
     const curMois  = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
     const prevMois = allMonths[allMonths.indexOf(curMois) - 1] || allMonths[allMonths.length - 2] || ''
@@ -252,7 +245,7 @@ export async function GET(req: Request) {
     }
 
     const par_commercial: ComRow[] = Array.from(comMap.entries()).map(([nom, recs]) => {
-      const filtRecs    = mois
+      const filtRecs = mois
         ? recs.filter(r => hasContrat(r) && strVal(r.fields[F.MOIS_SIGNATURE]) === mois)
         : annee
           ? recs.filter(r => hasContrat(r) && strVal(r.fields[F.MOIS_SIGNATURE]).startsWith(annee))
@@ -320,10 +313,10 @@ export async function GET(req: Request) {
 
     // ─── Pipeline 30j par commercial ──────────────────────────────────────────
     const pipeline_par_commercial: PipelineRow[] = Array.from(comMap.entries()).map(([nom, recs]) => {
-      const items   = buildPipelineItems(recs)
-      const signesP   = items.filter(i => i.signe)
-      const enCoursP  = items.filter(i => !i.signe)
-      const delais    = items.filter(i => i.signe && i.delai_creation_signature >= 0).map(i => i.delai_creation_signature)
+      const items      = buildPipelineItems(recs)
+      const signesP    = items.filter(i => i.signe)
+      const enCoursP   = items.filter(i => !i.signe)
+      const delais     = items.filter(i => i.signe && i.delai_creation_signature >= 0).map(i => i.delai_creation_signature)
       return {
         nom,
         total_pipe:      items.length,
@@ -339,10 +332,12 @@ export async function GET(req: Request) {
         delai_moy:       delais.length ? Math.round(avgArr(delais)) : 0,
         items,
       }
-    }).filter(p => p.total_pipe > 0).sort((a, b) => b.total_pipe - a.total_pipe)
+    }).filter(p => p.total_pipe > 0).sort((a, b) => b.en_cours_pipe - a.en_cours_pipe)
 
-    const allPipeItems  = buildPipelineItems(records)
-    const allPipeSigned = allPipeItems.filter(i => i.signe)
+    // ─── Pipeline global ──────────────────────────────────────────────────────
+    const allPipeItems   = buildPipelineItems(records)
+    const allPipeSigned  = allPipeItems.filter(i => i.signe)
+    const allPipeEnCours = allPipeItems.filter(i => !i.signe)
 
     // ─── Par installateur global ───────────────────────────────────────────────
     const instMapGlobal = new Map<string, Rec[]>()
@@ -376,6 +371,7 @@ export async function GET(req: Request) {
       }
     }).sort((a, b) => b.signes - a.signes)
 
+    // ─── Segmentation & apporteurs ────────────────────────────────────────────
     const par_segmentation: Record<string, number> = {}
     const signesGlobal = filteredAll.filter(r => !isAnnule(r))
     for (const r of signesGlobal) {
@@ -393,18 +389,17 @@ export async function GET(req: Request) {
       par_installateur,
       par_segmentation,
       pipeline_par_commercial,
-      const allPipeEnCours = allPipeItems.filter(i => !i.signe)
       pipeline_global: {
-        total:            allPipeItems.length,
-        signes:           allPipeSigned.length,
-        en_cours:         allPipeEnCours.length,
-        taux_conversion:  allPipeItems.length ? Math.round(allPipeSigned.length / allPipeItems.length * 100) : 0,
-        capex_pipe:       allPipeItems.reduce((s, i) => s + i.capex, 0),
-        capex_signe:      allPipeSigned.reduce((s, i) => s + i.capex, 0),
-        capex_en_cours:   allPipeEnCours.reduce((s, i) => s + i.capex, 0),
-        kwc_pipe:         allPipeItems.reduce((s, i) => s + i.kwc, 0),
-        kwc_signe:        allPipeSigned.reduce((s, i) => s + i.kwc, 0),
-        kwc_en_cours:     allPipeEnCours.reduce((s, i) => s + i.kwc, 0),
+        total:          allPipeItems.length,
+        signes:         allPipeSigned.length,
+        en_cours:       allPipeEnCours.length,
+        taux_conversion: allPipeItems.length ? Math.round(allPipeSigned.length / allPipeItems.length * 100) : 0,
+        capex_pipe:     allPipeItems.reduce((s, i) => s + i.capex, 0),
+        capex_signe:    allPipeSigned.reduce((s, i) => s + i.capex, 0),
+        capex_en_cours: allPipeEnCours.reduce((s, i) => s + i.capex, 0),
+        kwc_pipe:       allPipeItems.reduce((s, i) => s + i.kwc, 0),
+        kwc_signe:      allPipeSigned.reduce((s, i) => s + i.kwc, 0),
+        kwc_en_cours:   allPipeEnCours.reduce((s, i) => s + i.kwc, 0),
       },
       apporteurs: {
         avec: signesGlobal.filter(r => r.fields[F.APPORTEUR] === true).length,
