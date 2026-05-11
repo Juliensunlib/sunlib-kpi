@@ -369,11 +369,11 @@ export default function CommercialClient() {
   const instItems = useMemo(() => (data?.par_installateur || []) as unknown as Record<string, unknown>[], [data])
   const pipeItems = useMemo(() => (data?.pipeline_par_commercial || []) as unknown as Record<string, unknown>[], [data])
 
-  const comSort  = useSort(comItems,  'signes')
+  const comSort  = useSort(comItems,  'capex')
   const instSort = useSort(instItems, 'signes')
   const pipeSort = useSort(pipeItems, 'total_pipe')
 
-  const maxCom  = useMemo(() => Math.max(...(data?.par_commercial.map(c => c.signes)  || [1]), 1), [data])
+  const maxCom  = useMemo(() => Math.max(...(data?.par_commercial.map(c => c.capex)  || [1]), 1), [data])
   const maxInst = useMemo(() => Math.max(...(data?.par_installateur.map(i => i.signes) || [1]), 1), [data])
   const maxPipe = useMemo(() => Math.max(...(data?.pipeline_par_commercial.map(p => p.total_pipe) || [1]), 1), [data])
   const heatMax = useMemo(() => data ? Math.max(...data.par_commercial.flatMap(c => c.monthly.map(m => m.signes)), 1) : 1, [data])
