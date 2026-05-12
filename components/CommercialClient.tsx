@@ -402,7 +402,12 @@ export default function CommercialClient() {
   const [view, setView]       = useState<ViewType>('leaderboard')
   const [selCom, setSelCom]   = useState<ComRow | null>(null)
   const [selPipe, setSelPipe] = useState<PipelineRow | null>(null)
-  const [search, setSearch]   = useState('')
+const [search, setSearch]   = useState('')
+  const [role, setRole]       = useState('')
+
+  useEffect(() => {
+    fetch('/api/auth').then(r => r.json()).then(j => setRole(j.role || ''))
+  }, [])
 
   async function load(yr: string, mo: string) {
     setLoading(true); setError(null)
@@ -482,7 +487,9 @@ export default function CommercialClient() {
             ))}
           </div>
           <div className="flex-1" />
-          <a href="/dashboard" className="text-sm px-3 py-1.5 border border-gray-200 rounded-lg hover:bg-gray-50 text-gray-600">← Production</a>
+          {role === 'admin' && (
+            <a href="/dashboard" className="text-sm px-3 py-1.5 border border-gray-200 rounded-lg hover:bg-gray-50 text-gray-600">← Production</a>
+          )}
         </div>
       </header>
 
