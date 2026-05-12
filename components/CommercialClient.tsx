@@ -21,7 +21,11 @@ type SortDir = 'asc' | 'desc'
 type ViewType = 'leaderboard' | 'pipeline' | 'heatmap' | 'installateurs'
 
 // ─── Formatters ───────────────────────────────────────────────────────────────
-const fmtK = (v: number) => v >= 1_000_000 ? `${(v / 1_000_000).toFixed(1)}M€` : v >= 1_000 ? `${Math.round(v / 1_000)}k€` : `${Math.round(v)}€`
+const fmtK = (v: number) => {
+  if (v >= 1_000_000) return `${(v / 1_000_000).toFixed(3)} M€`
+  if (v >= 1_000) return `${Math.round(v / 1_000)}k€`
+  return `${Math.round(v)}€`
+}
 const fmtFull = (v: number) => new Intl.NumberFormat('fr-FR', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 }).format(v)
 const fmtDate = (s: string) => { if (!s) return '—'; try { return new Date(s).toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit', year: '2-digit' }) } catch { return s.slice(0, 10) } }
 
