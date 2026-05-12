@@ -67,7 +67,7 @@ const F = {
   ETAT_F2:           'fldFbme1enY3VGb40',
   DUREE_F2_J:        'fldzMJMqnDQ5eNRUo',
   KWC:               'fldTJkt211i53Ktmy',
-  CAPEX_HT:          'fldtX7I9xNCHY4BTw',
+  CAPEX_HT:          'fldplSMBmal4BFo3O',
   ABONNEMENT_KPI:    'fldBm8DaWTWaH7Ccs',
   COMMERCIAL:        'fldU5fZaVA2bLy35p',
   INSTALLATEUR_NOM:  'fldjUg9dVe5LrbX9i',
