@@ -29,10 +29,17 @@ function avg(arr: number[]): number {
 }
 
 function label(ym: string): string {
-  const [y, m] = ym.split('-')
-  return new Date(Number(y), Number(m) - 1, 1)
+  const parts = ym.split('-')
+  return new Date(Number(parts[0]), Number(parts[1]) - 1, 1)
     .toLocaleDateString('fr-FR', { month: 'short', year: '2-digit' })
     .replace('.', '')
+}
+
+// ← Normalisation : Solo + Duo → Particulier
+function normalizeSegment(seg: string): string {
+  if (seg === 'Solo' || seg === 'Duo') return 'Particulier'
+  if (seg === 'Pro') return 'Pro'
+  return seg || 'Non défini'
 }
 
 const F = {
@@ -57,9 +64,7 @@ type Rec = { id: string; fields: Record<string, unknown> }
 
 function isSigne(f: Record<string, unknown>): boolean {
   const att = f[F.CONTRAT_ATTACHMENT]
-  const hasFile = Array.isArray(att) && att.length > 0
-  const statut = str(f[F.STATUT_ABONNE])
-  return hasFile && statut !== 'Annulé'
+  return Array.isArray(att) && att.length > 0 && str(f[F.STATUT_ABONNE]) !== 'Annulé'
 }
 
 async function fetchAll(): Promise<Rec[]> {
@@ -90,7 +95,15 @@ export async function GET(req: NextRequest) {
     const records = await fetchAll()
 
     const filtered = records.filter(r => {
-      if (segment !== 'Tous' && str(r.fields[F.SEGMENT]) !== segment) return false
+      // Filtre segment — "Particulier" = Solo OU Duo
+      if (segment !== 'Tous') {
+        const seg = str(r.fields[F.SEGMENT])
+        if (segment === 'Particulier') {
+          if (seg !== 'Solo' && seg !== 'Duo') return false
+        } else {
+          if (seg !== segment) return false
+        }
+      }
       if (typeInstall !== 'Tous' && str(r.fields[F.TYPE_INSTALLATION]) !== typeInstall) return false
       if (annee && !str(r.fields[F.MOIS_SIGNATURE]).startsWith(String(annee))) return false
       return true
@@ -131,6 +144,11 @@ export async function GET(req: NextRequest) {
       }
     }
 
+    // isPro basé sur le segment normalisé
+    const isParticulier = (r: Rec) => {
+      const seg = str(r.fields[F.SEGMENT])
+      return seg === 'Solo' || seg === 'Duo'
+    }
     const isPro = (r: Rec) => str(r.fields[F.SEGMENT]) === 'Pro'
 
     const monthly = Array.from(byMonth.keys()).sort().map(month => {
@@ -139,17 +157,15 @@ export async function GET(req: NextRequest) {
         month, label: label(month),
         nb_signes:         signes.length,
         nb_signes_pro:     signes.filter(isPro).length,
-        nb_signes_part:    signes.filter(r => !isPro(r)).length,
+        nb_signes_part:    signes.filter(isParticulier).length,
         kwc_signes:        signes.reduce((s, r) => s + num(r.fields[F.KWC]), 0),
-        // CAPEX signé = valeur exacte sans arrondi
         capex_ht_signes:   signes.reduce((s, r) => s + num(r.fields[F.CAPEX_HT]), 0),
         moy_abonnement:    avg(signes.map(r => num(r.fields[F.ABONNEMENT_KPI])).filter(v => v > 0)),
         moy_duree_contrat: avg(signes.map(r => num(r.fields[F.DUREE_CONTRAT_KPI])).filter(v => v > 0)),
         nb_poses:          poses.length,
         nb_poses_pro:      poses.filter(isPro).length,
-        nb_poses_part:     poses.filter(r => !isPro(r)).length,
+        nb_poses_part:     poses.filter(isParticulier).length,
         kwc_poses:         poses.reduce((s, r) => s + num(r.fields[F.KWC]), 0),
-        // CAPEX posé = valeur exacte sans arrondi
         capex_ht_poses:    poses.reduce((s, r) => s + num(r.fields[F.CAPEX_HT]), 0),
         moy_duree_f2:      avg(poses.map(r => num(r.fields[F.DUREE_F2_J])).filter(v => v > 0)),
         nb_f3:             f3.length,
@@ -164,7 +180,8 @@ export async function GET(req: NextRequest) {
     const par_statut:       Record<string, number> = {}
 
     for (const r of allSignes) {
-      const seg = str(r.fields[F.SEGMENT])           || 'Non défini'
+      // ← Normalisation : Solo + Duo → Particulier dans par_segment
+      const seg = normalizeSegment(str(r.fields[F.SEGMENT]))
       const ti  = str(r.fields[F.TYPE_INSTALLATION]) || 'Non défini'
       const st  = str(r.fields[F.STATUT_DOSSIER])    || 'Non défini'
       par_segment[seg]     = (par_segment[seg]     || 0) + 1
@@ -176,7 +193,6 @@ export async function GET(req: NextRequest) {
       global: {
         total_signes:       allSignes.length,
         total_kwc_signes:   allSignes.reduce((s, r) => s + num(r.fields[F.KWC]), 0),
-        // Valeurs exactes sans arrondi
         total_capex_signes: allSignes.reduce((s, r) => s + num(r.fields[F.CAPEX_HT]), 0),
         total_poses:        allPoses.length,
         total_kwc_poses:    allPoses.reduce((s, r) => s + num(r.fields[F.KWC]), 0),
