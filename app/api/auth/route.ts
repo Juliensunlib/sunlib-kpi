@@ -1,23 +1,30 @@
-import { NextRequest, NextResponse } from 'next/server'
-import { SignJWT } from 'jose'
+import { NextResponse } from 'next/server'
+import { SignJWT, jwtVerify } from 'jose'
 
-export async function POST(req: NextRequest) {
+const secret = new TextEncoder().encode(process.env.JWT_SECRET!)
+
+export async function POST(req: Request) {
   const { password } = await req.json()
-  const expected = process.env.KPI_PASSWORD
 
-  if (!expected || password !== expected) {
+  let role: 'admin' | 'commercial' | null = null
+
+  if (password === process.env.KPI_PASSWORD) {
+    role = 'admin'
+  } else if (password === process.env.COMMERCIAL_PASSWORD) {
+    role = 'commercial'
+  }
+
+  if (!role) {
     return NextResponse.json({ error: 'Mot de passe incorrect' }, { status: 401 })
   }
 
-  const secret = new TextEncoder().encode(process.env.JWT_SECRET || 'fallback_dev_secret')
-  const token = await new SignJWT({ role: 'admin' })
+  const token = await new SignJWT({ role })
     .setProtectedHeader({ alg: 'HS256' })
-    .setIssuedAt()
     .setExpirationTime('7d')
     .sign(secret)
 
-  const res = NextResponse.json({ ok: true })
-  res.cookies.set('kpi_session', token, {
+  const res = NextResponse.json({ ok: true, role })
+  res.cookies.set('kpi_token', token, {
     httpOnly: true,
     secure: process.env.NODE_ENV === 'production',
     sameSite: 'lax',
@@ -29,6 +36,18 @@ export async function POST(req: NextRequest) {
 
 export async function DELETE() {
   const res = NextResponse.json({ ok: true })
-  res.cookies.delete('kpi_session')
+  res.cookies.set('kpi_token', '', { maxAge: 0, path: '/' })
   return res
+}
+
+export async function GET(req: Request) {
+  const cookie = req.headers.get('cookie') || ''
+  const token  = cookie.split(';').find(c => c.trim().startsWith('kpi_token='))?.split('=')?.[1]
+  if (!token) return NextResponse.json({ ok: false })
+  try {
+    const { payload } = await jwtVerify(token, secret)
+    return NextResponse.json({ ok: true, role: payload.role })
+  } catch {
+    return NextResponse.json({ ok: false })
+  }
 }
