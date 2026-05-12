@@ -19,6 +19,8 @@ interface KPIGlobal {
   moy_abonnement: number; moy_duree_contrat: number; moy_duree_f2: number
   mandats_signes: number; mandats_total: number
   par_segment: Record<string, number>
+  capex_pro: number; capex_part: number
+  kwc_pro: number; kwc_part: number
   par_type_install: Record<string, number>
   par_statut: Record<string, number>
 }
@@ -77,6 +79,74 @@ function StatBar({ title, data, total }: {
             </div>
           </div>
         ))}
+      </div>
+    </div>
+  )
+}
+function SegmentBars({ g }: { g: KPIGlobal }) {
+  const pro  = g.par_segment['Pro']  || 0
+  const part = g.par_segment['Particulier'] || 0
+  const total = pro + part || 1
+
+  const fmtEurK = (v: number) =>
+    v >= 1_000_000
+      ? new Intl.NumberFormat('fr-FR', { maximumFractionDigits: 0 }).format(v) + ' €'
+      : v >= 1_000 ? `${Math.round(v / 1_000)}k€` : `${Math.round(v)}€`
+
+  const rows = [
+    {
+      label: 'Contrats signés',
+      proVal: pro,   proFmt: String(pro),
+      partVal: part, partFmt: String(part),
+      total,
+    },
+    {
+      label: 'kWc signés',
+      proVal: g.kwc_pro,   proFmt: `${g.kwc_pro.toFixed(1)} kWc`,
+      partVal: g.kwc_part, partFmt: `${g.kwc_part.toFixed(1)} kWc`,
+      total: (g.kwc_pro + g.kwc_part) || 1,
+    },
+    {
+      label: 'CAPEX signé HT',
+      proVal: g.capex_pro,   proFmt: fmtEurK(g.capex_pro),
+      partVal: g.capex_part, partFmt: fmtEurK(g.capex_part),
+      total: (g.capex_pro + g.capex_part) || 1,
+    },
+  ]
+
+  return (
+    <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-4">
+      <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-4">Répartition segment</h3>
+      <div className="space-y-4">
+        {rows.map(({ label, proVal, proFmt, partVal, partFmt, total }) => {
+          const pctPro  = Math.round(proVal  / total * 100)
+          const pctPart = Math.round(partVal / total * 100)
+          return (
+            <div key={label}>
+              <p className="text-xs text-gray-500 mb-1.5">{label}</p>
+              {/* Barre segmentée */}
+              <div className="flex h-2 rounded-full overflow-hidden mb-1.5">
+                <div className="bg-blue-500 transition-all" style={{ width: `${pctPro}%` }} />
+                <div className="bg-amber-400 transition-all" style={{ width: `${pctPart}%` }} />
+              </div>
+              {/* Légende */}
+              <div className="flex justify-between text-xs">
+                <div className="flex items-center gap-1.5">
+                  <span className="w-2 h-2 rounded-sm bg-blue-500 inline-block" />
+                  <span className="text-gray-600">Pro</span>
+                  <span className="font-semibold text-gray-800">{proFmt}</span>
+                  <span className="text-gray-400">({pctPro}%)</span>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <span className="text-gray-400">({pctPart}%)</span>
+                  <span className="font-semibold text-gray-800">{partFmt}</span>
+                  <span className="text-gray-600">Part.</span>
+                  <span className="w-2 h-2 rounded-sm bg-amber-400 inline-block" />
+                </div>
+              </div>
+            </div>
+          )
+        })}
       </div>
     </div>
   )
@@ -294,7 +364,7 @@ export default function DashboardClient() {
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <StatBar title="Répartition segment"  data={g.par_segment}      total={g.total_signes} />
+              <SegmentBars g={g} />
               <StatBar title="Type d'installation"  data={g.par_type_install} total={g.total_signes} />
               <StatBar title="Statut dossiers"
                 data={g.par_statut}
