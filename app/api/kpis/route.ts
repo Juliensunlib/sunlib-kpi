@@ -52,7 +52,7 @@ const F = {
   ETAT_F3:            'fldDZe4wp4DTRHIzC',
   DUREE_F2_J:         'fldzMJMqnDQ5eNRUo',
   KWC:                'fldTJkt211i53Ktmy',
-  CAPEX_HT:           'fldtX7I9xNCHY4BTw',
+  CAPEX_HT:           'fldplSMBmal4BFo3O',
   ABONNEMENT_KPI:     'fldBm8DaWTWaH7Ccs',
   DUREE_CONTRAT_KPI:  'fldNyoThqq9xETowk',
   TYPE_INSTALLATION:  'fldKXJ0epXcIMopFd',
