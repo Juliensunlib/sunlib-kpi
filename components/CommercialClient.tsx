@@ -409,6 +409,11 @@ const [search, setSearch]   = useState('')
     fetch('/api/auth').then(r => r.json()).then(j => setRole(j.role || ''))
   }, [])
 
+  async function logout() {
+    await fetch('/api/auth', { method: 'DELETE' })
+    window.location.href = '/login'
+  }
+
   async function load(yr: string, mo: string) {
     setLoading(true); setError(null)
     try {
@@ -490,6 +495,9 @@ const [search, setSearch]   = useState('')
           {role === 'admin' && (
             <a href="/dashboard" className="text-sm px-3 py-1.5 border border-gray-200 rounded-lg hover:bg-gray-50 text-gray-600">← Production</a>
           )}
+          <button onClick={logout} className="text-sm px-3 py-1.5 text-gray-500 hover:text-gray-700">
+            Déco
+          </button>
         </div>
       </header>
 
