@@ -94,7 +94,6 @@ export default function DashboardClient() {
   const [log, setLog]                 = useState<Array<{ date: string; entries: ChangeEntry[] }>>([])
   const [refreshing, setRefreshing]   = useState(false)
 
-  // ─── Notifications non lues ────────────────────────────────────────────────
   const [lastRead, setLastRead] = useState<string>(() => {
     if (typeof window !== 'undefined') {
       return localStorage.getItem('kpi_last_read') || ''
@@ -110,7 +109,6 @@ export default function DashboardClient() {
     setLastRead(now)
   }
 
-  // ─── Chargement KPIs ───────────────────────────────────────────────────────
   const load = useCallback(async (seg: Segment, ti: TypeInstall, yr: string) => {
     setLoading(true); setError(null)
     try {
@@ -126,7 +124,6 @@ export default function DashboardClient() {
 
   useEffect(() => { load('Tous', 'Tous', '') }, [load])
 
-  // ─── Chargement changelog ──────────────────────────────────────────────────
   useEffect(() => {
     fetch('/api/snapshot')
       .then(r => r.json())
@@ -171,7 +168,6 @@ export default function DashboardClient() {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      {/* Header */}
       <header className="bg-white border-b border-gray-200 sticky top-0 z-10">
         <div className="max-w-screen-2xl mx-auto px-4 py-3 flex items-center gap-3 flex-wrap">
           <div className="flex items-center gap-2 mr-2">
@@ -183,14 +179,13 @@ export default function DashboardClient() {
             <span className="font-semibold text-gray-900 text-sm">SunLib KPIs</span>
           </div>
 
-          {/* Filtres */}
           <div className="flex items-center gap-2 flex-1 flex-wrap">
             <select value={segment}
               onChange={e => applyFilter(e.target.value as Segment, typeInstall, annee)}
               className="text-sm border border-gray-200 rounded-lg px-3 py-1.5 bg-white">
               <option value="Tous">Tous segments</option>
               <option value="Pro">Pro</option>
-              <<option value="Particulier">Particulier</option>
+              <option value="Particulier">Particulier</option>
             </select>
             <select value={typeInstall}
               onChange={e => applyFilter(segment, e.target.value as TypeInstall, annee)}
@@ -210,15 +205,12 @@ export default function DashboardClient() {
             </select>
           </div>
 
-          {/* Actions */}
           <div className="flex items-center gap-2">
             {data && (
               <span className="text-xs text-gray-400 hidden sm:block">
                 {data.total_records} records · {new Date(data.last_updated).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}
               </span>
             )}
-
-            {/* Bouton Journal */}
             <button onClick={() => setShowLog(!showLog)}
               className="relative text-sm px-3 py-1.5 border border-gray-200 rounded-lg hover:bg-gray-50">
               📋 Journal
@@ -228,20 +220,14 @@ export default function DashboardClient() {
                 </span>
               )}
             </button>
-
-            {/* Bouton Snapshot */}
             <button onClick={snapshot} disabled={refreshing}
               className="text-sm px-3 py-1.5 border border-gray-200 rounded-lg hover:bg-gray-50 disabled:opacity-50">
               {refreshing ? '⏳' : '📸'} Snapshot
             </button>
-
-            {/* ← Bouton Commercial */}
             <a href="/commercial"
               className="text-sm px-3 py-1.5 bg-blue-50 border border-blue-200 rounded-lg hover:bg-blue-100 text-blue-700 font-medium">
               👥 Commercial
             </a>
-
-            {/* Déconnexion */}
             <button onClick={logout}
               className="text-sm px-3 py-1.5 text-gray-500 hover:text-gray-700">
               Déco
@@ -269,7 +255,6 @@ export default function DashboardClient() {
 
         {!loading && !error && g && (
           <>
-            {/* Ligne 1 */}
             <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-3">
               <KPICard label="Contrats signés"  value={g.total_signes}     icon="📝" />
               <KPICard label="Poses réalisées"   value={g.total_poses}      icon="🔧"
@@ -279,7 +264,6 @@ export default function DashboardClient() {
                 sub={`${Math.round(g.mandats_signes / Math.max(g.mandats_total, 1) * 100)}% signés`} />
             </div>
 
-            {/* Ligne 2 */}
             <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-5">
               <KPICard label="CAPEX signé"   value={g.total_capex_signes} icon="💶" currency />
               <KPICard label="CAPEX posé"    value={g.total_capex_poses}  icon="💰" currency />
@@ -288,7 +272,6 @@ export default function DashboardClient() {
                 sub="Sig. → Pose validée" decimals={1} />
             </div>
 
-            {/* Graphiques */}
             <div className="bg-white rounded-xl border border-gray-100 shadow-sm mb-4">
               <div className="border-b border-gray-100 flex overflow-x-auto">
                 {tabs.map(t => (
@@ -310,7 +293,6 @@ export default function DashboardClient() {
               </div>
             </div>
 
-            {/* Répartitions */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <StatBar title="Répartition segment"  data={g.par_segment}      total={g.total_signes} />
               <StatBar title="Type d'installation"  data={g.par_type_install} total={g.total_signes} />
@@ -322,7 +304,6 @@ export default function DashboardClient() {
         )}
       </main>
 
-      {/* Panneau Journal */}
       {showLog && (
         <div className="fixed inset-y-0 right-0 w-96 max-w-full bg-white border-l border-gray-200 shadow-xl z-20 flex flex-col">
           <div className="flex items-center justify-between p-4 border-b">
