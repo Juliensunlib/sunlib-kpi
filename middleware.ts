@@ -2,31 +2,39 @@ import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
 import { jwtVerify } from 'jose'
 
-export async function middleware(request: NextRequest) {
-  const { pathname } = request.nextUrl
+const secret = new TextEncoder().encode(process.env.JWT_SECRET!)
 
-  if (
-    pathname.startsWith('/api/auth') ||
-    pathname.startsWith('/api/snapshot') ||
-    pathname.startsWith('/login') ||
-    pathname.startsWith('/_next')
-  ) {
+const PUBLIC_PATHS = ['/login', '/api/auth', '/api/snapshot']
+
+export async function middleware(req: NextRequest) {
+  const { pathname } = req.nextUrl
+
+  // Routes publiques
+  if (PUBLIC_PATHS.some(p => pathname.startsWith(p))) {
     return NextResponse.next()
   }
 
-  const token = request.cookies.get('kpi_session')?.value
-  if (!token) return NextResponse.redirect(new URL('/login', request.url))
+  const token = req.cookies.get('kpi_token')?.value
+
+  // Pas de token → login
+  if (!token) {
+    return NextResponse.redirect(new URL('/login', req.url))
+  }
 
   try {
-    const secret = new TextEncoder().encode(
-      process.env.JWT_SECRET || 'dev_secret_32chars_minimum_here!'
-    )
-    await jwtVerify(token, secret)
+    const { payload } = await jwtVerify(token, secret)
+    const role = payload.role as string
+
+    // Rôle commercial → accès à /commercial et /api/commercial uniquement
+    if (role === 'commercial') {
+      if (pathname.startsWith('/dashboard') || pathname.startsWith('/api/kpis') || pathname.startsWith('/api/snapshot')) {
+        return NextResponse.redirect(new URL('/commercial', req.url))
+      }
+    }
+
     return NextResponse.next()
   } catch {
-    const res = NextResponse.redirect(new URL('/login', request.url))
-    res.cookies.delete('kpi_session')
-    return res
+    return NextResponse.redirect(new URL('/login', req.url))
   }
 }
 
