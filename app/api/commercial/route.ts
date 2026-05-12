@@ -73,7 +73,8 @@ const F = {
   INSTALLATEUR_NOM:  'fldjUg9dVe5LrbX9i',
   MASTEUR:           'fldWBnPJD6A1tiVA2',
   SEGMENTATION_INST: 'fldRVUOfmjSxYOJF5',
-  APPORTEUR:         'fldJyaa6ss3mHJ2zZ',
+  APPORTEUR:          'fldJyaa6ss3mHJ2zZ',
+  CONTRAT_NON_SIGNE:  'fldLgnDhQLhSeVjU5',
   NOM:               'fldfnBO2Xb6mNgAcq',
   PRENOM:            'fldhxncaPKtHlqqgZ',
   NOM_ENTREPRISE:    'flduVtvZSWvLPSBEg',
@@ -183,7 +184,11 @@ function buildMonthly(recs: Rec[], months: string[]): MonthlyRow[] {
 
 function buildPipelineItems(recs: Rec[]): PipelineItem[] {
   return recs
-    .filter(r => isWithin30Days(strVal(r.fields[F.DATE_EDITION])))
+    .filter(r => {
+      const contratNonSigne = r.fields[F.CONTRAT_NON_SIGNE]
+      const hasContratNonSigne = Array.isArray(contratNonSigne) && contratNonSigne.length > 0
+      return isWithin30Days(strVal(r.fields[F.DATE_EDITION])) && hasContratNonSigne
+    })
     .map(r => {
       const dateSig  = strVal(r.fields[F.DATE_SIGNATURE])
       const dateCrea = strVal(r.fields[F.DATE_CREATION])
