@@ -3,7 +3,7 @@ import { useState, useEffect, useCallback } from 'react'
 import MonthlyChart from './MonthlyChart'
 import Changelog from './Changelog'
 
-type Segment     = 'Tous' | 'Pro' | 'Solo' | 'Duo'
+type Segment     = 'Tous' | 'Pro' | 'Particulier'
 type TypeInstall = 'Tous' | 'PV seul' | 'PV + Batterie' | 'PV + Batterie Virtuelle'
 type TabId       = 'signes' | 'poses' | 'capex_signes' | 'capex_poses' | 'kwc' | 'duree_f2'
 
@@ -190,8 +190,7 @@ export default function DashboardClient() {
               className="text-sm border border-gray-200 rounded-lg px-3 py-1.5 bg-white">
               <option value="Tous">Tous segments</option>
               <option value="Pro">Pro</option>
-              <option value="Solo">Solo</option>
-              <option value="Duo">Duo</option>
+              <<option value="Particulier">Particulier</option>
             </select>
             <select value={typeInstall}
               onChange={e => applyFilter(segment, e.target.value as TypeInstall, annee)}
