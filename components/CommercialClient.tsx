@@ -22,7 +22,7 @@ type ViewType = 'leaderboard' | 'pipeline' | 'heatmap' | 'installateurs'
 
 // ─── Formatters ───────────────────────────────────────────────────────────────
 const fmtK = (v: number) => {
-  if (v >= 1_000_000) return `${(v / 1_000_000).toFixed(3)} M€`
+  if (v >= 1_000_000) return new Intl.NumberFormat('fr-FR', { maximumFractionDigits: 0 }).format(v) + ' €'
   if (v >= 1_000) return `${Math.round(v / 1_000)}k€`
   return `${Math.round(v)}€`
 }
@@ -60,11 +60,11 @@ function Th({ label, k, col, dir, onSort }: { label: string; k: string; col: str
   )
 }
 
-function PctBar({ v, max, color = 'bg-blue-400' }: { v: number; max: number; color?: string }) {
+function MiniBar({ v, max, color = 'bg-amber-400' }: { v: number; max: number; color?: string }) {
   const pct = max ? Math.min(Math.round(v / max * 100), 100) : 0
   return (
-    <div className="flex-1 h-1.5 bg-gray-100 rounded-full" style={{ minWidth: 40 }}>
-      <div className={`h-1.5 rounded-full ${color}`} style={{ width: `${pct}%` }} />
+    <div className="w-full h-1 bg-gray-100 rounded-full mt-1">
+      <div className={`h-1 rounded-full ${color}`} style={{ width: `${pct}%` }} />
     </div>
   )
 }
@@ -87,9 +87,7 @@ function TauxPose({ v }: { v: number }) {
 }
 
 function Medal({ rank }: { rank: number }) {
-  if (rank === 1) return <span>🥇</span>
-  if (rank === 2) return <span>🥈</span>
-  if (rank === 3) return <span>🥉</span>
+  if (rank === 1) return <span>🥇</span>; if (rank === 2) return <span>🥈</span>; if (rank === 3) return <span>🥉</span>
   return <span className="text-xs text-gray-400 font-bold">#{rank}</span>
 }
 
@@ -146,26 +144,12 @@ function PipelinePanel({ pipe, onClose }: { pipe: PipelineRow; onClose: () => vo
       <div className="w-full max-w-2xl bg-white shadow-2xl flex flex-col overflow-hidden">
         <div className="bg-gradient-to-r from-indigo-600 to-indigo-700 p-5 text-white">
           <div className="flex items-center justify-between mb-4">
-            <div className="flex items-center gap-3">
-              <Avatar nom={pipe.nom} size={12} />
-              <div>
-                <h2 className="text-xl font-bold">{pipe.nom}</h2>
-                <p className="text-indigo-200 text-sm">Pipeline 30 jours glissants</p>
-              </div>
-            </div>
+            <div className="flex items-center gap-3"><Avatar nom={pipe.nom} size={12} /><div><h2 className="text-xl font-bold">{pipe.nom}</h2><p className="text-indigo-200 text-sm">Pipeline 30 jours glissants</p></div></div>
             <button onClick={onClose} className="text-white/60 hover:text-white text-2xl">✕</button>
           </div>
           <div className="grid grid-cols-4 gap-2">
-            {[
-              { label: 'À signer',    value: String(pipe.en_cours_pipe)                },
-              { label: 'CAPEX restant', value: fmtK(pipe.capex_en_cours)               },
-              { label: 'Taux conv.',  value: `${pipe.taux_conversion}%`                },
-              { label: 'Délai moy.',  value: pipe.delai_moy > 0 ? `${pipe.delai_moy}j` : '—' },
-            ].map(({ label, value }) => (
-              <div key={label} className="bg-white/10 rounded-lg p-2 text-center">
-                <p className="text-white/60 text-xs">{label}</p>
-                <p className="text-white font-bold text-lg">{value}</p>
-              </div>
+            {[{ label: 'À signer', value: String(pipe.en_cours_pipe) }, { label: 'CAPEX restant', value: fmtK(pipe.capex_en_cours) }, { label: 'Taux conv.', value: `${pipe.taux_conversion}%` }, { label: 'Délai moy.', value: pipe.delai_moy > 0 ? `${pipe.delai_moy}j` : '—' }].map(({ label, value }) => (
+              <div key={label} className="bg-white/10 rounded-lg p-2 text-center"><p className="text-white/60 text-xs">{label}</p><p className="text-white font-bold text-lg">{value}</p></div>
             ))}
           </div>
         </div>
@@ -174,20 +158,11 @@ function PipelinePanel({ pipe, onClose }: { pipe: PipelineRow; onClose: () => vo
             <span>{pipe.signes_pipe} signés sur {pipe.total_pipe} dossiers</span>
             <span className="font-semibold text-orange-600">{fmtK(pipe.capex_en_cours)} restant à signer</span>
           </div>
-          <div className="h-2 bg-indigo-200 rounded-full">
-            <div className="h-2 bg-indigo-500 rounded-full" style={{ width: `${pipe.total_pipe ? Math.round(pipe.signes_pipe / pipe.total_pipe * 100) : 0}%` }} />
-          </div>
+          <div className="h-2 bg-indigo-200 rounded-full"><div className="h-2 bg-indigo-500 rounded-full" style={{ width: `${pipe.total_pipe ? Math.round(pipe.signes_pipe / pipe.total_pipe * 100) : 0}%` }} /></div>
         </div>
         <div className="flex border-b border-gray-100">
-          {([
-            ['en_cours', `À signer (${pipe.en_cours_pipe})`],
-            ['tous',     `Tous (${pipe.items.length})`     ],
-            ['signes',   `Signés (${pipe.signes_pipe})`    ],
-          ] as [string, string][]).map(([id, label]) => (
-            <button key={id} onClick={() => setTab(id as 'tous' | 'signes' | 'en_cours')}
-              className={`px-4 py-2.5 text-sm border-b-2 transition-colors ${tab === id ? 'border-indigo-500 text-indigo-600 font-medium' : 'border-transparent text-gray-500 hover:text-gray-700'}`}>
-              {label}
-            </button>
+          {([['en_cours', `À signer (${pipe.en_cours_pipe})`], ['tous', `Tous (${pipe.items.length})`], ['signes', `Signés (${pipe.signes_pipe})`]] as [string, string][]).map(([id, label]) => (
+            <button key={id} onClick={() => setTab(id as 'tous' | 'signes' | 'en_cours')} className={`px-4 py-2.5 text-sm border-b-2 transition-colors ${tab === id ? 'border-indigo-500 text-indigo-600 font-medium' : 'border-transparent text-gray-500 hover:text-gray-700'}`}>{label}</button>
           ))}
         </div>
         <div className="flex-1 overflow-y-auto">
@@ -211,12 +186,7 @@ function PipelinePanel({ pipe, onClose }: { pipe: PipelineRow; onClose: () => vo
                   <td className="px-3 py-2.5 text-right font-medium text-gray-700">{fmtK(item.capex)}</td>
                   <td className="px-3 py-2.5 text-center text-xs text-gray-500">{fmtDate(item.date_creation)}</td>
                   <td className="px-3 py-2.5 text-center text-xs text-gray-500">{fmtDate(item.date_edition)}</td>
-                  <td className="px-3 py-2.5 text-center">
-                    {item.signe
-                      ? <span className="text-xs bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded-full font-medium">✓ Signé</span>
-                      : <span className="text-xs bg-orange-100 text-orange-700 px-1.5 py-0.5 rounded-full font-medium">À signer</span>
-                    }
-                  </td>
+                  <td className="px-3 py-2.5 text-center">{item.signe ? <span className="text-xs bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded-full font-medium">✓ Signé</span> : <span className="text-xs bg-orange-100 text-orange-700 px-1.5 py-0.5 rounded-full font-medium">À signer</span>}</td>
                   <td className="px-3 py-2.5 text-center text-xs text-gray-500">{item.delai_creation_signature >= 0 ? `${item.delai_creation_signature}j` : '—'}</td>
                 </tr>
               ))}
@@ -252,10 +222,31 @@ function ComPanel({ com, months, onClose }: { com: ComRow; months: string[]; onC
 
   const maxInstMonth = Math.max(...instForMonth.map(i => i.signes), 1)
 
+  // Colonnes du tableau installateurs
+  const instCols = !selMonth
+    ? [
+        { label: 'Signés',    k: 'signes'      },
+        { label: 'Annulés',   k: 'annules'     },
+        { label: 'CAPEX',     k: 'capex'       },
+        { label: 'kWc',       k: 'kwc'         },
+        { label: 'Poses',     k: 'poses'       },
+        { label: 'Taux pose', k: 'taux_pose'   },
+        { label: 'Délai sig.',k: 'delai_moy_creation_signature' },
+      ]
+    : [
+        { label: 'Signés',  k: 'signes'  },
+        { label: 'Annulés', k: 'annules' },
+        { label: 'CAPEX',   k: 'capex'   },
+        { label: 'kWc',     k: 'kwc'     },
+        { label: 'Poses',   k: 'poses'   },
+      ]
+
   return (
     <div className="fixed inset-0 z-30 flex">
       <div className="flex-1 bg-black/20 backdrop-blur-sm" onClick={onClose} />
       <div className="w-full max-w-3xl bg-white shadow-2xl flex flex-col overflow-hidden">
+
+        {/* Header */}
         <div className="bg-gradient-to-r from-blue-600 to-blue-700 p-5 text-white">
           <div className="flex items-center justify-between mb-4">
             <div className="flex items-center gap-3">
@@ -287,7 +278,9 @@ function ComPanel({ com, months, onClose }: { com: ComRow; months: string[]; onC
             )}
           </div>
         </div>
+
         <div className="flex-1 overflow-y-auto p-4 space-y-4">
+          {/* Graphique mensuel */}
           {!selMonth && (
             <div>
               <h3 className="text-sm font-semibold text-gray-700 mb-2">Activité mensuelle</h3>
@@ -298,6 +291,8 @@ function ComPanel({ com, months, onClose }: { com: ComRow; months: string[]; onC
               </div>
             </div>
           )}
+
+          {/* Heatmap */}
           <div>
             <div className="flex items-center justify-between mb-2">
               <h3 className="text-sm font-semibold text-gray-700">
@@ -320,11 +315,15 @@ function ComPanel({ com, months, onClose }: { com: ComRow; months: string[]; onC
               </div>
             </div>
           </div>
+
+          {/* Tableau installateurs */}
           <div>
             <h3 className="text-sm font-semibold text-gray-700 mb-2">
               {selMonth ? `Installateurs actifs en ${mLabel} (${instForMonth.length})` : `Ses installateurs (${com.installateurs.length})`}
             </h3>
+
             {sel ? (
+              /* Drill-down installateur */
               <div className="border border-blue-200 rounded-xl overflow-hidden">
                 <div className="bg-blue-50 p-3 flex items-center justify-between">
                   <div className="flex items-center gap-2">
@@ -343,44 +342,57 @@ function ComPanel({ com, months, onClose }: { com: ComRow; months: string[]; onC
                       <p>contrats signés en {mLabel}</p>
                       <p className="text-xs mt-1">{fmtK(sel.monthly.find(r => r.month === selMonth)?.capex || 0)} CAPEX · {(sel.monthly.find(r => r.month === selMonth)?.kwc || 0).toFixed(1)} kWc</p>
                     </div>
-                  ) : (
-                    <BarChart data={sel.monthly} months={months} />
-                  )}
+                  ) : <BarChart data={sel.monthly} months={months} />}
                 </div>
               </div>
             ) : (
+              /* Tableau installateurs — ← CORRECTION ALIGNEMENT */
               <div className="overflow-x-auto">
-                <table className="w-full text-sm">
+                <table className="w-full text-sm border-collapse">
                   <thead>
-                    <tr className="border-b border-gray-100">
-                      {!selMonth ? (
-                        [{ label: 'Installateur', k: 'nom' }, { label: 'Signés', k: 'signes' }, { label: 'Annulés', k: 'annules' }, { label: 'CAPEX', k: 'capex' }, { label: 'Poses', k: 'poses' }, { label: 'Taux pose', k: 'taux_pose' }, { label: 'Délai sig.', k: 'delai_moy_creation_signature' }].map(({ label, k }) => (
-                          <Th key={k} label={label} k={k} col={instSort.col} dir={instSort.dir} onSort={instSort.toggle} />
-                        ))
-                      ) : (
-                        ['Installateur', 'Signés', 'Annulés', 'CAPEX', 'kWc', 'Poses'].map(l => (
-                          <th key={l} className="px-3 py-1.5 text-left text-xs font-semibold text-gray-500">{l}</th>
-                        ))
-                      )}
+                    <tr className="border-b border-gray-200 bg-gray-50">
+                      <th className="px-3 py-2 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">Installateur</th>
+                      {instCols.map(({ label, k }) => (
+                        <Th key={k} label={label} k={k} col={instSort.col} dir={instSort.dir} onSort={instSort.toggle} />
+                      ))}
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-gray-50">
-                    {instForMonth.map((inst, i) => (
-                      <tr key={i} onClick={() => setSel(com.installateurs.find(ci => ci.nom === inst.nom) || null)} className="hover:bg-blue-50 cursor-pointer transition-colors">
-                        <td className="px-3 py-2">
-                          <PctBarCount v={inst.signes} max={selMonth ? maxInstMonth : maxInst} color="bg-amber-400" />
-                          <p className="text-xs text-gray-600 mt-0.5 truncate max-w-[160px]">{inst.nom}</p>
-                        </td>
-                        <td className="px-3 py-2 font-medium text-gray-800">{inst.signes}</td>
-                        <td className="px-3 py-2"><span className={inst.annules > 0 ? 'text-red-500 font-medium' : 'text-gray-300'}>{inst.annules || '—'}</span></td>
-                        <td className="px-3 py-2 text-gray-700">{fmtK(inst.capex)}</td>
-                        <td className="px-3 py-2 text-gray-600">{inst.kwc.toFixed(1)}</td>
-                        <td className="px-3 py-2 text-gray-700">{inst.poses}</td>
-                        {!selMonth && <td className="px-3 py-2"><TauxPose v={inst.taux_pose} /></td>}
-                        {!selMonth && <td className="px-3 py-2 text-gray-500 text-xs">{inst.delai_moy_creation_signature > 0 ? `${inst.delai_moy_creation_signature}j` : '—'}</td>}
-                      </tr>
-                    ))}
-                    {instForMonth.length === 0 && <tr><td colSpan={7} className="px-3 py-8 text-center text-gray-400 text-sm">Aucune activité ce mois</td></tr>}
+                  <tbody className="divide-y divide-gray-100">
+                    {instForMonth.map((inst, i) => {
+                      const max = selMonth ? maxInstMonth : maxInst
+                      return (
+                        <tr key={i} onClick={() => setSel(com.installateurs.find(ci => ci.nom === inst.nom) || null)}
+                          className="hover:bg-blue-50 cursor-pointer transition-colors align-middle">
+                          {/* ← Colonne installateur : nom + mini barre, hauteur fixe */}
+                          <td className="px-3 py-2.5" style={{ maxWidth: 180 }}>
+                            <p className="text-sm font-medium text-gray-800 truncate">{inst.nom}</p>
+                            <MiniBar v={inst.signes} max={max} />
+                          </td>
+                          {/* Signés */}
+                          <td className="px-3 py-2.5 text-center font-semibold text-gray-800">{inst.signes}</td>
+                          {/* Annulés */}
+                          <td className="px-3 py-2.5 text-center">
+                            <span className={inst.annules > 0 ? 'text-red-500 font-medium' : 'text-gray-300'}>{inst.annules || '—'}</span>
+                          </td>
+                          {/* CAPEX */}
+                          <td className="px-3 py-2.5 text-right font-medium text-gray-700">{fmtK(inst.capex)}</td>
+                          {/* kWc */}
+                          <td className="px-3 py-2.5 text-right text-gray-600">{inst.kwc.toFixed(1)}</td>
+                          {/* Poses */}
+                          <td className="px-3 py-2.5 text-center text-gray-700">{inst.poses}</td>
+                          {/* Taux pose + Délai sig. uniquement si pas de filtre mois */}
+                          {!selMonth && (
+                            <>
+                              <td className="px-3 py-2.5 text-center"><TauxPose v={inst.taux_pose} /></td>
+                              <td className="px-3 py-2.5 text-center text-gray-500 text-xs">{inst.delai_moy_creation_signature > 0 ? `${inst.delai_moy_creation_signature}j` : '—'}</td>
+                            </>
+                          )}
+                        </tr>
+                      )
+                    })}
+                    {instForMonth.length === 0 && (
+                      <tr><td colSpan={8} className="px-3 py-8 text-center text-gray-400 text-sm">Aucune activité ce mois</td></tr>
+                    )}
                   </tbody>
                 </table>
               </div>
@@ -402,7 +414,7 @@ export default function CommercialClient() {
   const [view, setView]       = useState<ViewType>('leaderboard')
   const [selCom, setSelCom]   = useState<ComRow | null>(null)
   const [selPipe, setSelPipe] = useState<PipelineRow | null>(null)
-const [search, setSearch]   = useState('')
+  const [search, setSearch]   = useState('')
   const [role, setRole]       = useState('')
 
   useEffect(() => {
@@ -495,9 +507,7 @@ const [search, setSearch]   = useState('')
           {role === 'admin' && (
             <a href="/dashboard" className="text-sm px-3 py-1.5 border border-gray-200 rounded-lg hover:bg-gray-50 text-gray-600">← Production</a>
           )}
-          <button onClick={logout} className="text-sm px-3 py-1.5 text-gray-500 hover:text-gray-700">
-            Déco
-          </button>
+          <button onClick={logout} className="text-sm px-3 py-1.5 text-gray-500 hover:text-gray-700">Déco</button>
         </div>
       </header>
 
@@ -544,33 +554,21 @@ const [search, setSearch]   = useState('')
                       {top3[1] && (
                         <div className="flex flex-col items-center gap-2 cursor-pointer" onClick={() => setSelCom(top3[1])}>
                           <Avatar nom={top3[1].nom} size={14} />
-                          <div className="text-center">
-                            <p className="text-xs text-gray-500">{top3[1].nom.split(' ')[0]}</p>
-                            <p className="font-bold text-xl text-gray-800">{fmtK(top3[1].capex)}</p>
-                            <p className="text-xs text-gray-400">{top3[1].signes} contrats</p>
-                          </div>
+                          <div className="text-center"><p className="text-xs text-gray-500">{top3[1].nom.split(' ')[0]}</p><p className="font-bold text-xl text-gray-800">{fmtK(top3[1].capex)}</p><p className="text-xs text-gray-400">{top3[1].signes} contrats</p></div>
                           <div className="w-20 bg-gray-200 rounded-t-lg flex items-center justify-center text-2xl" style={{ height: 60 }}>🥈</div>
                         </div>
                       )}
                       {top3[0] && (
                         <div className="flex flex-col items-center gap-2 cursor-pointer" onClick={() => setSelCom(top3[0])}>
                           <div className="relative"><Avatar nom={top3[0].nom} size={18} /><span className="absolute -top-2 -right-2 text-xl">👑</span></div>
-                          <div className="text-center">
-                            <p className="text-sm text-gray-600 font-medium">{top3[0].nom.split(' ')[0]}</p>
-                            <p className="font-bold text-3xl text-gray-900">{fmtK(top3[0].capex)}</p>
-                            <p className="text-sm text-gray-500">{top3[0].signes} contrats</p>
-                          </div>
+                          <div className="text-center"><p className="text-sm text-gray-600 font-medium">{top3[0].nom.split(' ')[0]}</p><p className="font-bold text-3xl text-gray-900">{fmtK(top3[0].capex)}</p><p className="text-sm text-gray-500">{top3[0].signes} contrats</p></div>
                           <div className="w-24 bg-amber-400 rounded-t-lg flex items-center justify-center text-2xl" style={{ height: 80 }}>🥇</div>
                         </div>
                       )}
                       {top3[2] && (
                         <div className="flex flex-col items-center gap-2 cursor-pointer" onClick={() => setSelCom(top3[2])}>
                           <Avatar nom={top3[2].nom} size={12} />
-                          <div className="text-center">
-                            <p className="text-xs text-gray-500">{top3[2].nom.split(' ')[0]}</p>
-                            <p className="font-bold text-lg text-gray-800">{fmtK(top3[2].capex)}</p>
-                            <p className="text-xs text-gray-400">{top3[2].signes} contrats</p>
-                          </div>
+                          <div className="text-center"><p className="text-xs text-gray-500">{top3[2].nom.split(' ')[0]}</p><p className="font-bold text-lg text-gray-800">{fmtK(top3[2].capex)}</p><p className="text-xs text-gray-400">{top3[2].signes} contrats</p></div>
                           <div className="w-16 bg-orange-300 rounded-t-lg flex items-center justify-center text-2xl" style={{ height: 45 }}>🥉</div>
                         </div>
                       )}
@@ -605,23 +603,18 @@ const [search, setSearch]   = useState('')
                             <td className="px-4 py-3">
                               <div className="flex items-center gap-2.5">
                                 <Avatar nom={com.nom} size={8} />
-                                <div>
-                                  <p className="font-medium text-gray-900 text-sm">{com.nom}</p>
-                                  <p className="text-xs text-gray-400">{com.abo_moyen > 0 ? `Abo. moy. ${fmtFull(com.abo_moyen)}` : '—'}</p>
-                                </div>
+                                <div><p className="font-medium text-gray-900 text-sm">{com.nom}</p><p className="text-xs text-gray-400">{com.abo_moyen > 0 ? `Abo. moy. ${fmtFull(com.abo_moyen)}` : '—'}</p></div>
                               </div>
                             </td>
                             <td className="px-4 py-3">
-                              <PctBar v={com.capex} max={maxCom} color={i < 3 ? 'bg-amber-400' : 'bg-blue-400'} />
+                              <div className="flex-1 h-1.5 bg-gray-100 rounded-full" style={{ minWidth: 60 }}>
+                                <div className={`h-1.5 rounded-full ${i < 3 ? 'bg-amber-400' : 'bg-blue-400'}`} style={{ width: `${Math.min(Math.round(com.capex / maxCom * 100), 100)}%` }} />
+                              </div>
                               <p className="text-sm font-semibold text-gray-800 mt-0.5">{fmtK(com.capex)}</p>
                             </td>
                             <td className="px-4 py-3 text-center"><Trend v={com.tendance_signes} /></td>
                             <td className="px-4 py-3 text-gray-700 text-sm">{com.signes} <span className="text-xs text-gray-400">contrats</span></td>
-                            <td className="px-4 py-3 text-center">
-                              {com.annules > 0
-                                ? <span className="text-red-500 font-medium text-sm">{com.annules} <span className="text-red-400 text-xs">({com.taux_annulation}%)</span></span>
-                                : <span className="text-gray-300 text-sm">—</span>}
-                            </td>
+                            <td className="px-4 py-3 text-center">{com.annules > 0 ? <span className="text-red-500 font-medium text-sm">{com.annules} <span className="text-red-400 text-xs">({com.taux_annulation}%)</span></span> : <span className="text-gray-300 text-sm">—</span>}</td>
                             <td className="px-4 py-3 text-center"><TauxPose v={com.taux_pose} /></td>
                             <td className="px-4 py-3 text-center text-sm text-gray-600">{com.delai_moy_creation_signature > 0 ? `${com.delai_moy_creation_signature}j` : '—'}</td>
                             <td className="px-4 py-3 flex justify-center"><Sparkline data={data.months.map(m => com.monthly.find(r => r.month === m)?.signes || 0)} color={i < 3 ? '#f59e0b' : '#60a5fa'} /></td>
@@ -640,10 +633,10 @@ const [search, setSearch]   = useState('')
               <div className="space-y-4">
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                   {[
-                    { label: 'À signer',              value: String(data.pipeline_global.en_cours),      sub: `${data.pipeline_global.total} dossiers au total`,        accent: true  },
-                    { label: 'CAPEX restant à signer', value: fmtK(data.pipeline_global.capex_en_cours), sub: `${fmtK(data.pipeline_global.capex_signe)} déjà signé`,    accent: true  },
-                    { label: 'Déjà signés',           value: String(data.pipeline_global.signes),        sub: `Taux ${data.pipeline_global.taux_conversion}%`,           accent: false },
-                    { label: 'kWc à signer',          value: `${Math.round(data.pipeline_global.kwc_en_cours)} kWc`, sub: `${Math.round(data.pipeline_global.kwc_signe)} kWc signés`, accent: false },
+                    { label: 'À signer',               value: String(data.pipeline_global.en_cours),      sub: `${data.pipeline_global.total} dossiers au total`,        accent: true  },
+                    { label: 'CAPEX restant à signer',  value: fmtK(data.pipeline_global.capex_en_cours), sub: `${fmtK(data.pipeline_global.capex_signe)} déjà signé`,    accent: true  },
+                    { label: 'Déjà signés',            value: String(data.pipeline_global.signes),        sub: `Taux ${data.pipeline_global.taux_conversion}%`,           accent: false },
+                    { label: 'kWc à signer',           value: `${Math.round(data.pipeline_global.kwc_en_cours)} kWc`, sub: `${Math.round(data.pipeline_global.kwc_signe)} kWc signés`, accent: false },
                   ].map(({ label, value, sub, accent }) => (
                     <div key={label} className={`kpi-card ${accent ? 'border-l-4 border-l-orange-400' : 'border-l-4 border-l-indigo-400'}`}>
                       <p className="kpi-label">{label}</p>
@@ -680,24 +673,18 @@ const [search, setSearch]   = useState('')
                             <td className="px-4 py-3"><div className="flex items-center gap-2"><Avatar nom={pipe.nom} size={8} /><span className="font-medium text-gray-900 text-sm">{pipe.nom}</span></div></td>
                             <td className="px-4 py-3"><PctBarCount v={pipe.en_cours_pipe} max={maxPipe} color="bg-orange-400" /></td>
                             <td className="px-4 py-3" style={{ minWidth: 120 }}>
-                              <div className="h-2 bg-gray-100 rounded-full">
-                                <div className="h-2 bg-indigo-500 rounded-full" style={{ width: `${pipe.total_pipe ? Math.round(pipe.signes_pipe / pipe.total_pipe * 100) : 0}%` }} />
-                              </div>
+                              <div className="h-2 bg-gray-100 rounded-full"><div className="h-2 bg-indigo-500 rounded-full" style={{ width: `${pipe.total_pipe ? Math.round(pipe.signes_pipe / pipe.total_pipe * 100) : 0}%` }} /></div>
                               <p className="text-xs text-gray-400 mt-0.5">{pipe.signes_pipe}/{pipe.total_pipe} signés</p>
                             </td>
                             <td className="px-4 py-3 font-bold text-orange-600">{fmtK(pipe.capex_en_cours)}</td>
                             <td className="px-4 py-3 font-medium text-emerald-600">{pipe.signes_pipe}</td>
-                            <td className="px-4 py-3">
-                              <span className={`font-semibold text-sm ${pipe.taux_conversion >= 70 ? 'text-emerald-600' : pipe.taux_conversion >= 40 ? 'text-amber-600' : 'text-gray-400'}`}>{pipe.taux_conversion}%</span>
-                            </td>
+                            <td className="px-4 py-3"><span className={`font-semibold text-sm ${pipe.taux_conversion >= 70 ? 'text-emerald-600' : pipe.taux_conversion >= 40 ? 'text-amber-600' : 'text-gray-400'}`}>{pipe.taux_conversion}%</span></td>
                             <td className="px-4 py-3 text-gray-600">{fmtK(pipe.capex_signe)}</td>
                             <td className="px-4 py-3 text-gray-600">{pipe.kwc_en_cours.toFixed(1)}</td>
                             <td className="px-4 py-3 text-gray-500 text-sm">{pipe.delai_moy > 0 ? `${pipe.delai_moy}j` : '—'}</td>
                           </tr>
                         ))}
-                        {data.pipeline_par_commercial.length === 0 && (
-                          <tr><td colSpan={10} className="px-4 py-12 text-center text-gray-400">Aucun dossier dans le pipeline des 30 derniers jours</td></tr>
-                        )}
+                        {data.pipeline_par_commercial.length === 0 && <tr><td colSpan={10} className="px-4 py-12 text-center text-gray-400">Aucun dossier dans le pipeline des 30 derniers jours</td></tr>}
                       </tbody>
                     </table>
                   </div>
@@ -731,10 +718,7 @@ const [search, setSearch]   = useState('')
                               <span className="text-sm font-medium text-gray-700 truncate max-w-[100px]">{com.nom}</span>
                             </div>
                           </td>
-                          {data.months.map(m => {
-                            const d = com.monthly.find(r => r.month === m)
-                            return <td key={m} className="px-0.5 py-1.5"><HeatCell v={d?.signes || 0} max={heatMax} onClick={() => setSelCom(com)} /></td>
-                          })}
+                          {data.months.map(m => { const d = com.monthly.find(r => r.month === m); return <td key={m} className="px-0.5 py-1.5"><HeatCell v={d?.signes || 0} max={heatMax} onClick={() => setSelCom(com)} /></td> })}
                           <td className="pl-4 py-1.5 text-right font-bold text-gray-800">{com.signes}</td>
                           <td className="pl-3 py-1.5 text-right text-xs text-gray-500">{com.delai_moy_creation_signature > 0 ? `${com.delai_moy_creation_signature}j` : '—'}</td>
                         </tr>
@@ -743,10 +727,7 @@ const [search, setSearch]   = useState('')
                     <tfoot>
                       <tr className="border-t-2 border-gray-200">
                         <td className="pr-4 pt-2 pb-1 text-xs font-semibold text-gray-500">TOTAL</td>
-                        {data.months.map(m => {
-                          const total = data.par_commercial.reduce((s, c) => s + (c.monthly.find(r => r.month === m)?.signes || 0), 0)
-                          return <td key={m} className="px-0.5 pt-2 pb-1 text-center"><span className="text-xs font-bold text-gray-600">{total || ''}</span></td>
-                        })}
+                        {data.months.map(m => { const total = data.par_commercial.reduce((s, c) => s + (c.monthly.find(r => r.month === m)?.signes || 0), 0); return <td key={m} className="px-0.5 pt-2 pb-1 text-center"><span className="text-xs font-bold text-gray-600">{total || ''}</span></td> })}
                         <td className="pl-4 pt-2 pb-1 text-right font-bold text-blue-600">{data.meta.total_signes}</td>
                         <td />
                       </tr>
@@ -765,12 +746,8 @@ const [search, setSearch]   = useState('')
             {view === 'installateurs' && (
               <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
                 <div className="px-5 py-4 border-b border-gray-100 flex items-center gap-4">
-                  <div className="flex-1">
-                    <h2 className="font-semibold text-gray-900">Tous les installateurs</h2>
-                    <p className="text-xs text-gray-400 mt-0.5">{filteredInstSorted.length} installateurs</p>
-                  </div>
-                  <input type="text" placeholder="Rechercher…" value={search} onChange={e => setSearch(e.target.value)}
-                    className="text-sm border border-gray-200 rounded-lg px-3 py-1.5 w-56 focus:outline-none focus:ring-2 focus:ring-blue-300" />
+                  <div className="flex-1"><h2 className="font-semibold text-gray-900">Tous les installateurs</h2><p className="text-xs text-gray-400 mt-0.5">{filteredInstSorted.length} installateurs</p></div>
+                  <input type="text" placeholder="Rechercher…" value={search} onChange={e => setSearch(e.target.value)} className="text-sm border border-gray-200 rounded-lg px-3 py-1.5 w-56 focus:outline-none focus:ring-2 focus:ring-blue-300" />
                 </div>
                 <div className="overflow-x-auto">
                   <table className="w-full text-sm">
