@@ -19,6 +19,7 @@ interface ApiData {
 
 type SortDir = 'asc' | 'desc'
 type ViewType = 'leaderboard' | 'pipeline' | 'heatmap' | 'installateurs'
+type Objectifs = Record<string, Record<string, number>>
 
 // ─── Formatters ───────────────────────────────────────────────────────────────
 const fmtK = (v: number) => {
@@ -50,7 +51,7 @@ function useSort(items: Record<string, unknown>[], def: string) {
   return { sorted, col, dir, toggle }
 }
 
-// ─── UI ───────────────────────────────────────────────────────────────────────
+// ─── UI communs ───────────────────────────────────────────────────────────────
 function Th({ label, k, col, dir, onSort }: { label: string; k: string; col: string; dir: SortDir; onSort: (k: string) => void }) {
   const active = k === col
   return (
@@ -62,11 +63,7 @@ function Th({ label, k, col, dir, onSort }: { label: string; k: string; col: str
 
 function MiniBar({ v, max, color = 'bg-amber-400' }: { v: number; max: number; color?: string }) {
   const pct = max ? Math.min(Math.round(v / max * 100), 100) : 0
-  return (
-    <div className="w-full h-1 bg-gray-100 rounded-full mt-1">
-      <div className={`h-1 rounded-full ${color}`} style={{ width: `${pct}%` }} />
-    </div>
-  )
+  return <div className="w-full h-1 bg-gray-100 rounded-full mt-1"><div className={`h-1 rounded-full ${color}`} style={{ width: `${pct}%` }} /></div>
 }
 
 function PctBarCount({ v, max, color = 'bg-blue-400' }: { v: number; max: number; color?: string }) {
@@ -120,12 +117,11 @@ function BarChart({ data, months }: { data: MonthlyRow[]; months: string[] }) {
       {months.map(m => {
         const d = data.find(r => r.month === m)
         const s = d?.signes || 0, a = d?.annules || 0
+        const total = s + a
         return (
           <div key={m} className="flex-1 flex flex-col items-center gap-0.5">
             <div className="w-full flex flex-col justify-end relative" style={{ height: 108 }}>
-              {(s + a) > 0 && (
-                <span className="absolute w-full text-center font-semibold text-gray-600" style={{ fontSize: 9, top: -13 }}>{s + a}</span>
-              )}
+              {total > 0 && <span className="absolute w-full text-center font-semibold text-gray-600" style={{ fontSize: 9, top: -13 }}>{total}</span>}
               {a > 0 && <div className="w-full bg-red-300 rounded-t-sm" style={{ height: Math.round((a / maxV) * 108) }} />}
               {s > 0 && <div className="w-full bg-amber-400 rounded-t-sm" style={{ height: Math.round((s / maxV) * 108) }} />}
             </div>
@@ -133,6 +129,46 @@ function BarChart({ data, months }: { data: MonthlyRow[]; months: string[] }) {
           </div>
         )
       })}
+    </div>
+  )
+}
+
+// ─── Barre objectif ───────────────────────────────────────────────────────────
+function ObjBar({ com, objectifs, months }: { com: ComRow; objectifs: Objectifs; months: string[] }) {
+  const annee = new Date().getFullYear().toString()
+  const currentMonth = new Date().toISOString().slice(0, 7)
+
+  // Matching flexible sur le nom
+  const objKey = Object.keys(objectifs).find(k =>
+    k.toLowerCase().split(' ').some(w => com.nom.toLowerCase().includes(w) && w.length > 3) ||
+    com.nom.toLowerCase().split(' ').some(w => k.toLowerCase().includes(w) && w.length > 3)
+  )
+  const objData = objKey ? objectifs[objKey] : null
+  if (!objData) return null
+
+  const objAnnuel = Object.values(objData).reduce((s, v) => s + v, 0)
+  const objCumul  = Object.entries(objData).filter(([m]) => `${annee}-${m.slice(-2)}` <= currentMonth || m <= currentMonth.slice(-2)).reduce((s, [, v]) => s + v, 0)
+  const realise   = com.capex
+
+  const pctAnnuel = objAnnuel > 0 ? Math.round(realise / objAnnuel * 100) : 0
+  const pctCumul  = objCumul  > 0 ? Math.round(realise / objCumul  * 100) : 0
+
+  const color = pctCumul >= 100 ? 'bg-emerald-500' : pctCumul >= 75 ? 'bg-amber-400' : pctCumul >= 50 ? 'bg-orange-400' : 'bg-red-400'
+  const textColor = pctCumul >= 100 ? 'text-emerald-300' : pctCumul >= 75 ? 'text-amber-300' : pctCumul >= 50 ? 'text-orange-300' : 'text-red-300'
+
+  return (
+    <div className="bg-white/10 rounded-xl p-3 mb-3">
+      <div className="flex items-center justify-between mb-1.5">
+        <span className="text-white/70 text-xs font-medium">Objectif CAPEX {annee}</span>
+        <span className={`text-sm font-bold ${textColor}`}>{pctCumul}% vs obj. à date</span>
+      </div>
+      <div className="h-2.5 bg-white/20 rounded-full overflow-hidden">
+        <div className={`h-2.5 rounded-full transition-all ${color}`} style={{ width: `${Math.min(pctAnnuel, 100)}%` }} />
+      </div>
+      <div className="flex justify-between text-xs text-white/50 mt-1.5">
+        <span className="text-white/80 font-medium">{fmtK(realise)} réalisé</span>
+        <span>{pctAnnuel}% annuel · obj. {fmtK(objAnnuel)}</span>
+      </div>
     </div>
   )
 }
@@ -186,7 +222,7 @@ function PipelinePanel({ pipe, onClose }: { pipe: PipelineRow; onClose: () => vo
                 <tr key={item.id} className="hover:bg-gray-50">
                   <td className="px-3 py-2.5"><p className="font-medium text-gray-800 text-sm truncate max-w-[140px]">{item.nom_abonne}</p><p className="text-xs text-gray-400">{item.segment}</p></td>
                   <td className="px-3 py-2.5"><p className="text-xs text-gray-600 truncate max-w-[120px]">{item.installateur}</p></td>
-                  <td className="px-3 py-2.5 text-right font-medium text-gray-700">{fmtK(item.capex)}</td>
+                  <td className="px-3 py-2.5 text-right font-medium text-gray-700 whitespace-nowrap">{fmtK(item.capex)}</td>
                   <td className="px-3 py-2.5 text-center text-xs text-gray-500">{fmtDate(item.date_creation)}</td>
                   <td className="px-3 py-2.5 text-center text-xs text-gray-500">{fmtDate(item.date_edition)}</td>
                   <td className="px-3 py-2.5 text-center">{item.signe ? <span className="text-xs bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded-full font-medium">✓ Signé</span> : <span className="text-xs bg-orange-100 text-orange-700 px-1.5 py-0.5 rounded-full font-medium">À signer</span>}</td>
@@ -203,7 +239,7 @@ function PipelinePanel({ pipe, onClose }: { pipe: PipelineRow; onClose: () => vo
 }
 
 // ─── Panneau commercial ───────────────────────────────────────────────────────
-function ComPanel({ com, months, onClose }: { com: ComRow; months: string[]; onClose: () => void }) {
+function ComPanel({ com, months, objectifs, onClose }: { com: ComRow; months: string[]; objectifs: Objectifs; onClose: () => void }) {
   const instItems = com.installateurs as unknown as Record<string, unknown>[]
   const instSort  = useSort(instItems, 'signes')
   const [sel, setSel]           = useState<InstRow | null>(null)
@@ -214,35 +250,13 @@ function ComPanel({ com, months, onClose }: { com: ComRow; months: string[]; onC
   const mLabel    = monthData?.label || selMonth?.slice(5) || ''
 
   const instForMonth = selMonth
-    ? com.installateurs
-        .map(inst => {
-          const m = inst.monthly.find(r => r.month === selMonth)
-          return { ...inst, signes: m?.signes || 0, annules: m?.annules || 0, capex: m?.capex || 0, kwc: m?.kwc || 0, poses: m?.poses || 0 }
-        })
-        .filter(i => i.signes + i.annules > 0)
-        .sort((a, b) => b.signes - a.signes)
+    ? com.installateurs.map(inst => {
+        const m = inst.monthly.find(r => r.month === selMonth)
+        return { ...inst, signes: m?.signes || 0, annules: m?.annules || 0, capex: m?.capex || 0, kwc: m?.kwc || 0, poses: m?.poses || 0 }
+      }).filter(i => i.signes + i.annules > 0).sort((a, b) => b.signes - a.signes)
     : (instSort.sorted as unknown as InstRow[])
 
   const maxInstMonth = Math.max(...instForMonth.map(i => i.signes), 1)
-
-  // Colonnes du tableau installateurs
-  const instCols = !selMonth
-    ? [
-        { label: 'Signés',    k: 'signes'      },
-        { label: 'Annulés',   k: 'annules'     },
-        { label: 'CAPEX',     k: 'capex'       },
-        { label: 'kWc',       k: 'kwc'         },
-        { label: 'Poses',     k: 'poses'       },
-        { label: 'Taux pose', k: 'taux_pose'   },
-        { label: 'Délai sig.',k: 'delai_moy_creation_signature' },
-      ]
-    : [
-        { label: 'Signés',  k: 'signes'  },
-        { label: 'Annulés', k: 'annules' },
-        { label: 'CAPEX',   k: 'capex'   },
-        { label: 'kWc',     k: 'kwc'     },
-        { label: 'Poses',   k: 'poses'   },
-      ]
 
   return (
     <div className="fixed inset-0 z-30 flex">
@@ -251,24 +265,24 @@ function ComPanel({ com, months, onClose }: { com: ComRow; months: string[]; onC
 
         {/* Header */}
         <div className="bg-gradient-to-r from-blue-600 to-blue-700 p-5 text-white">
-          <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center justify-between mb-3">
             <div className="flex items-center gap-3">
               <Avatar nom={com.nom} size={12} />
               <div>
                 <h2 className="text-xl font-bold">{com.nom}</h2>
                 <div className="flex items-center gap-2 mt-0.5">
                   <p className="text-blue-200 text-sm">{com.installateurs.length} installateurs</p>
-                  {selMonth && (
-                    <span className="flex items-center gap-1 bg-white/20 text-white text-xs px-2 py-0.5 rounded-full">
-                      📅 {mLabel}
-                      <button onClick={() => { setSelMonth(null); setSel(null) }} className="ml-1 hover:text-red-300">✕</button>
-                    </span>
-                  )}
+                  {selMonth && <span className="flex items-center gap-1 bg-white/20 text-white text-xs px-2 py-0.5 rounded-full">📅 {mLabel}<button onClick={() => { setSelMonth(null); setSel(null) }} className="ml-1 hover:text-red-300">✕</button></span>}
                 </div>
               </div>
             </div>
             <button onClick={onClose} className="text-white/60 hover:text-white text-2xl">✕</button>
           </div>
+
+          {/* Barre objectif */}
+          <ObjBar com={com} objectifs={objectifs} months={months} />
+
+          {/* KPI cards */}
           <div className="grid grid-cols-5 gap-2">
             {selMonth ? (
               [{ label: `Signés ${mLabel}`, value: String(monthData?.signes || 0) }, { label: 'Annulés', value: String(monthData?.annules || 0) }, { label: 'CAPEX', value: fmtK(monthData?.capex || 0) }, { label: 'kWc', value: String(Math.round(monthData?.kwc || 0)) }, { label: 'Poses', value: String(monthData?.poses || 0) }].map(({ label, value }) => (
@@ -298,9 +312,7 @@ function ComPanel({ com, months, onClose }: { com: ComRow; months: string[]; onC
           {/* Heatmap */}
           <div>
             <div className="flex items-center justify-between mb-2">
-              <h3 className="text-sm font-semibold text-gray-700">
-                Heatmap {selMonth && <span className="text-blue-600 ml-1">· {mLabel} sélectionné</span>}
-              </h3>
+              <h3 className="text-sm font-semibold text-gray-700">Heatmap {selMonth && <span className="text-blue-600 ml-1">· {mLabel} sélectionné</span>}</h3>
               {selMonth && <button onClick={() => { setSelMonth(null); setSel(null) }} className="text-xs text-gray-400 hover:text-gray-700">Voir tout ×</button>}
             </div>
             <div className="overflow-x-auto">
@@ -324,9 +336,7 @@ function ComPanel({ com, months, onClose }: { com: ComRow; months: string[]; onC
             <h3 className="text-sm font-semibold text-gray-700 mb-2">
               {selMonth ? `Installateurs actifs en ${mLabel} (${instForMonth.length})` : `Ses installateurs (${com.installateurs.length})`}
             </h3>
-
             {sel ? (
-              /* Drill-down installateur */
               <div className="border border-blue-200 rounded-xl overflow-hidden">
                 <div className="bg-blue-50 p-3 flex items-center justify-between">
                   <div className="flex items-center gap-2">
@@ -349,53 +359,44 @@ function ComPanel({ com, months, onClose }: { com: ComRow; months: string[]; onC
                 </div>
               </div>
             ) : (
-              /* Tableau installateurs — ← CORRECTION ALIGNEMENT */
               <div className="overflow-x-auto">
                 <table className="w-full text-sm border-collapse">
                   <thead>
                     <tr className="border-b border-gray-200 bg-gray-50">
                       <th className="px-3 py-2 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">Installateur</th>
-                      {instCols.map(({ label, k }) => (
-                        <Th key={k} label={label} k={k} col={instSort.col} dir={instSort.dir} onSort={instSort.toggle} />
-                      ))}
+                      <Th label="Signés"    k="signes"   col={instSort.col} dir={instSort.dir} onSort={instSort.toggle} />
+                      <Th label="Annulés"   k="annules"  col={instSort.col} dir={instSort.dir} onSort={instSort.toggle} />
+                      <Th label="CAPEX"     k="capex"    col={instSort.col} dir={instSort.dir} onSort={instSort.toggle} />
+                      <Th label="kWc"       k="kwc"      col={instSort.col} dir={instSort.dir} onSort={instSort.toggle} />
+                      <Th label="Poses"     k="poses"    col={instSort.col} dir={instSort.dir} onSort={instSort.toggle} />
+                      {!selMonth && <>
+                        <Th label="Taux pose"  k="taux_pose" col={instSort.col} dir={instSort.dir} onSort={instSort.toggle} />
+                        <Th label="Délai sig." k="delai_moy_creation_signature" col={instSort.col} dir={instSort.dir} onSort={instSort.toggle} />
+                      </>}
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-100">
                     {instForMonth.map((inst, i) => {
                       const max = selMonth ? maxInstMonth : maxInst
                       return (
-                        <tr key={i} onClick={() => setSel(com.installateurs.find(ci => ci.nom === inst.nom) || null)}
-                          className="hover:bg-blue-50 cursor-pointer transition-colors align-middle">
-                          {/* ← Colonne installateur : nom + mini barre, hauteur fixe */}
+                        <tr key={i} onClick={() => setSel(com.installateurs.find(ci => ci.nom === inst.nom) || null)} className="hover:bg-blue-50 cursor-pointer transition-colors align-middle">
                           <td className="px-3 py-2.5" style={{ maxWidth: 180 }}>
                             <p className="text-sm font-medium text-gray-800 truncate">{inst.nom}</p>
                             <MiniBar v={inst.signes} max={max} />
                           </td>
-                          {/* Signés */}
                           <td className="px-3 py-2.5 text-center font-semibold text-gray-800">{inst.signes}</td>
-                          {/* Annulés */}
-                          <td className="px-3 py-2.5 text-center">
-                            <span className={inst.annules > 0 ? 'text-red-500 font-medium' : 'text-gray-300'}>{inst.annules || '—'}</span>
-                          </td>
-                          {/* CAPEX */}
+                          <td className="px-3 py-2.5 text-center"><span className={inst.annules > 0 ? 'text-red-500 font-medium' : 'text-gray-300'}>{inst.annules || '—'}</span></td>
                           <td className="px-3 py-2.5 text-right text-xs font-medium text-gray-700 whitespace-nowrap">{fmtK(inst.capex)}</td>
-                          {/* kWc */}
                           <td className="px-3 py-2.5 text-right text-gray-600">{inst.kwc.toFixed(1)}</td>
-                          {/* Poses */}
                           <td className="px-3 py-2.5 text-center text-gray-700">{inst.poses}</td>
-                          {/* Taux pose + Délai sig. uniquement si pas de filtre mois */}
-                          {!selMonth && (
-                            <>
-                              <td className="px-3 py-2.5 text-center"><TauxPose v={inst.taux_pose} /></td>
-                              <td className="px-3 py-2.5 text-center text-gray-500 text-xs">{inst.delai_moy_creation_signature > 0 ? `${inst.delai_moy_creation_signature}j` : '—'}</td>
-                            </>
-                          )}
+                          {!selMonth && <>
+                            <td className="px-3 py-2.5 text-center"><TauxPose v={inst.taux_pose} /></td>
+                            <td className="px-3 py-2.5 text-center text-gray-500 text-xs">{inst.delai_moy_creation_signature > 0 ? `${inst.delai_moy_creation_signature}j` : '—'}</td>
+                          </>}
                         </tr>
                       )
                     })}
-                    {instForMonth.length === 0 && (
-                      <tr><td colSpan={8} className="px-3 py-8 text-center text-gray-400 text-sm">Aucune activité ce mois</td></tr>
-                    )}
+                    {instForMonth.length === 0 && <tr><td colSpan={8} className="px-3 py-8 text-center text-gray-400 text-sm">Aucune activité ce mois</td></tr>}
                   </tbody>
                 </table>
               </div>
@@ -409,19 +410,21 @@ function ComPanel({ com, months, onClose }: { com: ComRow; months: string[]; onC
 
 // ─── Dashboard principal ──────────────────────────────────────────────────────
 export default function CommercialClient() {
-  const [data, setData]       = useState<ApiData | null>(null)
-  const [loading, setLoading] = useState(true)
-  const [error, setError]     = useState<string | null>(null)
-  const [annee, setAnnee]     = useState('')
-  const [mois, setMois]       = useState('')
-  const [view, setView]       = useState<ViewType>('leaderboard')
-  const [selCom, setSelCom]   = useState<ComRow | null>(null)
-  const [selPipe, setSelPipe] = useState<PipelineRow | null>(null)
-  const [search, setSearch]   = useState('')
-  const [role, setRole]       = useState('')
+  const [data, setData]           = useState<ApiData | null>(null)
+  const [loading, setLoading]     = useState(true)
+  const [error, setError]         = useState<string | null>(null)
+  const [annee, setAnnee]         = useState('')
+  const [mois, setMois]           = useState('')
+  const [view, setView]           = useState<ViewType>('leaderboard')
+  const [selCom, setSelCom]       = useState<ComRow | null>(null)
+  const [selPipe, setSelPipe]     = useState<PipelineRow | null>(null)
+  const [search, setSearch]       = useState('')
+  const [role, setRole]           = useState('')
+  const [objectifs, setObjectifs] = useState<Objectifs>({})
 
   useEffect(() => {
     fetch('/api/auth').then(r => r.json()).then(j => setRole(j.role || ''))
+    fetch('/api/objectifs').then(r => r.json()).then(j => setObjectifs(j.objectifs || {})).catch(() => {})
   }, [])
 
   async function logout() {
@@ -486,58 +489,41 @@ export default function CommercialClient() {
             <div className="w-7 h-7 bg-blue-600 rounded-lg flex items-center justify-center"><span className="text-white text-sm">👥</span></div>
             <span className="font-semibold text-gray-900 text-sm">CRM Commercial</span>
           </div>
-          <select value={annee} onChange={e => { setAnnee(e.target.value); setMois(''); load(e.target.value, '') }}
-            className="text-sm border border-gray-200 rounded-lg px-3 py-1.5 bg-white">
+          <select value={annee} onChange={e => { setAnnee(e.target.value); setMois(''); load(e.target.value, '') }} className="text-sm border border-gray-200 rounded-lg px-3 py-1.5 bg-white">
             <option value="">Toutes années</option>
-            <option value="2024">2024</option>
-            <option value="2025">2025</option>
-            <option value="2026">2026</option>
+            <option value="2024">2024</option><option value="2025">2025</option><option value="2026">2026</option>
           </select>
-          <select value={mois} onChange={e => { setMois(e.target.value); setAnnee(''); load('', e.target.value) }}
-            className="text-sm border border-gray-200 rounded-lg px-3 py-1.5 bg-white">
+          <select value={mois} onChange={e => { setMois(e.target.value); setAnnee(''); load('', e.target.value) }} className="text-sm border border-gray-200 rounded-lg px-3 py-1.5 bg-white">
             <option value="">Tous les mois</option>
             {allMonths.map(m => <option key={m.v} value={m.v}>{m.l}</option>)}
           </select>
           <div className="flex bg-gray-100 rounded-lg p-1 gap-1">
             {views.map(v => (
-              <button key={v.id} onClick={() => setView(v.id)}
-                className={`px-3 py-1 text-sm rounded-md transition-all ${view === v.id ? 'bg-white shadow-sm text-gray-900 font-medium' : 'text-gray-500 hover:text-gray-700'}`}>
-                {v.label}
-              </button>
+              <button key={v.id} onClick={() => setView(v.id)} className={`px-3 py-1 text-sm rounded-md transition-all ${view === v.id ? 'bg-white shadow-sm text-gray-900 font-medium' : 'text-gray-500 hover:text-gray-700'}`}>{v.label}</button>
             ))}
           </div>
           <div className="flex-1" />
-          {role === 'admin' && (
-            <a href="/dashboard" className="text-sm px-3 py-1.5 border border-gray-200 rounded-lg hover:bg-gray-50 text-gray-600">← Production</a>
-          )}
+          {role === 'admin' && <a href="/dashboard" className="text-sm px-3 py-1.5 border border-gray-200 rounded-lg hover:bg-gray-50 text-gray-600">← Production</a>}
           <button onClick={logout} className="text-sm px-3 py-1.5 text-gray-500 hover:text-gray-700">Déco</button>
         </div>
       </header>
 
-      {selCom  && data && <ComPanel      com={selCom}   months={data.months} onClose={() => setSelCom(null)} />}
+      {selCom  && data && <ComPanel com={selCom} months={data.months} objectifs={objectifs} onClose={() => setSelCom(null)} />}
       {selPipe && data && <PipelinePanel pipe={selPipe} onClose={() => setSelPipe(null)} />}
 
       <main className="max-w-screen-2xl mx-auto px-4 py-5 space-y-4">
-        {loading && (
-          <div className="flex items-center justify-center py-32">
-            <div className="text-center">
-              <div className="w-10 h-10 border-2 border-blue-600 border-t-transparent rounded-full animate-spin mx-auto mb-3" />
-              <p className="text-sm text-gray-500">Chargement des données CRM…</p>
-            </div>
-          </div>
-        )}
+        {loading && <div className="flex items-center justify-center py-32"><div className="text-center"><div className="w-10 h-10 border-2 border-blue-600 border-t-transparent rounded-full animate-spin mx-auto mb-3" /><p className="text-sm text-gray-500">Chargement…</p></div></div>}
         {error && <div className="bg-red-50 border border-red-200 rounded-xl p-5"><p className="font-semibold text-red-700">{error}</p></div>}
 
         {!loading && !error && data && (
           <>
-            {/* Cards globales */}
             <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
               {[
-                { label: 'Contrats signés',       value: String(data.meta.total_signes),        sub: '',                                              red: false },
-                { label: 'Annulés',               value: String(data.meta.total_annules),       sub: `Taux ${data.meta.taux_annulation_global}%`,      red: true  },
-                { label: 'Commerciaux actifs',    value: String(data.meta.total_commerciaux),   sub: '',                                              red: false },
-                { label: 'Installateurs actifs',  value: String(data.meta.total_installateurs), sub: '',                                              red: false },
-                { label: 'À signer (30j)',         value: String(data.pipeline_global.en_cours), sub: `${fmtK(data.pipeline_global.capex_en_cours)} CAPEX restant`, red: false },
+                { label: 'Contrats signés',       value: String(data.meta.total_signes),        sub: '',                                                                red: false },
+                { label: 'Annulés',               value: String(data.meta.total_annules),       sub: `Taux ${data.meta.taux_annulation_global}%`,                       red: true  },
+                { label: 'Commerciaux actifs',    value: String(data.meta.total_commerciaux),   sub: '',                                                                red: false },
+                { label: 'Installateurs actifs',  value: String(data.meta.total_installateurs), sub: '',                                                                red: false },
+                { label: 'À signer (30j)',         value: String(data.pipeline_global.en_cours), sub: `${fmtK(data.pipeline_global.capex_en_cours)} CAPEX restant`,      red: false },
               ].map(({ label, value, sub, red }) => (
                 <div key={label} className="kpi-card">
                   <p className="kpi-label">{label}</p>
@@ -554,27 +540,9 @@ export default function CommercialClient() {
                   <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
                     <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wider mb-5">🏆 Top performers — CAPEX HT</h2>
                     <div className="flex items-end justify-center gap-6">
-                      {top3[1] && (
-                        <div className="flex flex-col items-center gap-2 cursor-pointer" onClick={() => setSelCom(top3[1])}>
-                          <Avatar nom={top3[1].nom} size={14} />
-                          <div className="text-center"><p className="text-xs text-gray-500">{top3[1].nom.split(' ')[0]}</p><p className="font-bold text-xl text-gray-800">{fmtK(top3[1].capex)}</p><p className="text-xs text-gray-400">{top3[1].signes} contrats</p></div>
-                          <div className="w-20 bg-gray-200 rounded-t-lg flex items-center justify-center text-2xl" style={{ height: 60 }}>🥈</div>
-                        </div>
-                      )}
-                      {top3[0] && (
-                        <div className="flex flex-col items-center gap-2 cursor-pointer" onClick={() => setSelCom(top3[0])}>
-                          <div className="relative"><Avatar nom={top3[0].nom} size={18} /><span className="absolute -top-2 -right-2 text-xl">👑</span></div>
-                          <div className="text-center"><p className="text-sm text-gray-600 font-medium">{top3[0].nom.split(' ')[0]}</p><p className="font-bold text-3xl text-gray-900">{fmtK(top3[0].capex)}</p><p className="text-sm text-gray-500">{top3[0].signes} contrats</p></div>
-                          <div className="w-24 bg-amber-400 rounded-t-lg flex items-center justify-center text-2xl" style={{ height: 80 }}>🥇</div>
-                        </div>
-                      )}
-                      {top3[2] && (
-                        <div className="flex flex-col items-center gap-2 cursor-pointer" onClick={() => setSelCom(top3[2])}>
-                          <Avatar nom={top3[2].nom} size={12} />
-                          <div className="text-center"><p className="text-xs text-gray-500">{top3[2].nom.split(' ')[0]}</p><p className="font-bold text-lg text-gray-800">{fmtK(top3[2].capex)}</p><p className="text-xs text-gray-400">{top3[2].signes} contrats</p></div>
-                          <div className="w-16 bg-orange-300 rounded-t-lg flex items-center justify-center text-2xl" style={{ height: 45 }}>🥉</div>
-                        </div>
-                      )}
+                      {top3[1] && <div className="flex flex-col items-center gap-2 cursor-pointer" onClick={() => setSelCom(top3[1])}><Avatar nom={top3[1].nom} size={14} /><div className="text-center"><p className="text-xs text-gray-500">{top3[1].nom.split(' ')[0]}</p><p className="font-bold text-xl text-gray-800">{fmtK(top3[1].capex)}</p><p className="text-xs text-gray-400">{top3[1].signes} contrats</p></div><div className="w-20 bg-gray-200 rounded-t-lg flex items-center justify-center text-2xl" style={{ height: 60 }}>🥈</div></div>}
+                      {top3[0] && <div className="flex flex-col items-center gap-2 cursor-pointer" onClick={() => setSelCom(top3[0])}><div className="relative"><Avatar nom={top3[0].nom} size={18} /><span className="absolute -top-2 -right-2 text-xl">👑</span></div><div className="text-center"><p className="text-sm text-gray-600 font-medium">{top3[0].nom.split(' ')[0]}</p><p className="font-bold text-3xl text-gray-900">{fmtK(top3[0].capex)}</p><p className="text-sm text-gray-500">{top3[0].signes} contrats</p></div><div className="w-24 bg-amber-400 rounded-t-lg flex items-center justify-center text-2xl" style={{ height: 80 }}>🥇</div></div>}
+                      {top3[2] && <div className="flex flex-col items-center gap-2 cursor-pointer" onClick={() => setSelCom(top3[2])}><Avatar nom={top3[2].nom} size={12} /><div className="text-center"><p className="text-xs text-gray-500">{top3[2].nom.split(' ')[0]}</p><p className="font-bold text-lg text-gray-800">{fmtK(top3[2].capex)}</p><p className="text-xs text-gray-400">{top3[2].signes} contrats</p></div><div className="w-16 bg-orange-300 rounded-t-lg flex items-center justify-center text-2xl" style={{ height: 45 }}>🥉</div></div>}
                     </div>
                   </div>
                 )}
@@ -590,6 +558,7 @@ export default function CommercialClient() {
                           <th className="px-4 py-3 text-left text-xs font-semibold text-gray-400 w-10">#</th>
                           <th className="px-4 py-3 text-left text-xs font-semibold text-gray-400">Commercial</th>
                           <Th label="CAPEX HT"   k="capex"                        col={comSort.col} dir={comSort.dir} onSort={comSort.toggle} />
+                          <th className="px-4 py-3 text-center text-xs font-semibold text-gray-400">Obj. %</th>
                           <th className="px-4 py-3 text-center text-xs font-semibold text-gray-400">Tendance</th>
                           <Th label="Signés"     k="signes"                       col={comSort.col} dir={comSort.dir} onSort={comSort.toggle} />
                           <Th label="Annulés"    k="annules"                      col={comSort.col} dir={comSort.dir} onSort={comSort.toggle} />
@@ -600,30 +569,50 @@ export default function CommercialClient() {
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-gray-50">
-                        {(comSort.sorted as unknown as ComRow[]).map((com, i) => (
-                          <tr key={com.nom} onClick={() => setSelCom(com)} className="hover:bg-blue-50 cursor-pointer transition-colors">
-                            <td className="px-4 py-3"><Medal rank={i + 1} /></td>
-                            <td className="px-4 py-3">
-                              <div className="flex items-center gap-2.5">
-                                <Avatar nom={com.nom} size={8} />
-                                <div><p className="font-medium text-gray-900 text-sm">{com.nom}</p><p className="text-xs text-gray-400">{com.abo_moyen > 0 ? `Abo. moy. ${fmtFull(com.abo_moyen)}` : '—'}</p></div>
-                              </div>
-                            </td>
-                            <td className="px-4 py-3">
-                              <div className="flex-1 h-1.5 bg-gray-100 rounded-full" style={{ minWidth: 60 }}>
-                                <div className={`h-1.5 rounded-full ${i < 3 ? 'bg-amber-400' : 'bg-blue-400'}`} style={{ width: `${Math.min(Math.round(com.capex / maxCom * 100), 100)}%` }} />
-                              </div>
-                              <p className="text-sm font-semibold text-gray-800 mt-0.5">{fmtK(com.capex)}</p>
-                            </td>
-                            <td className="px-4 py-3 text-center"><Trend v={com.tendance_signes} /></td>
-                            <td className="px-4 py-3 text-gray-700 text-sm">{com.signes} <span className="text-xs text-gray-400">contrats</span></td>
-                            <td className="px-4 py-3 text-center">{com.annules > 0 ? <span className="text-red-500 font-medium text-sm">{com.annules} <span className="text-red-400 text-xs">({com.taux_annulation}%)</span></span> : <span className="text-gray-300 text-sm">—</span>}</td>
-                            <td className="px-4 py-3 text-center"><TauxPose v={com.taux_pose} /></td>
-                            <td className="px-4 py-3 text-center text-sm text-gray-600">{com.delai_moy_creation_signature > 0 ? `${com.delai_moy_creation_signature}j` : '—'}</td>
-                            <td className="px-4 py-3 flex justify-center"><Sparkline data={data.months.map(m => com.monthly.find(r => r.month === m)?.signes || 0)} color={i < 3 ? '#f59e0b' : '#60a5fa'} /></td>
-                            <td className="px-4 py-3 text-center text-sm text-gray-600 font-medium">{com.installateurs.length}</td>
-                          </tr>
-                        ))}
+                        {(comSort.sorted as unknown as ComRow[]).map((com, i) => {
+                          // Calcul objectif pour la colonne du leaderboard
+                          const currentMonth = new Date().toISOString().slice(0, 7)
+                          const anneeStr = new Date().getFullYear().toString()
+                          const objKey = Object.keys(objectifs).find(k =>
+                            k.toLowerCase().split(' ').some(w => com.nom.toLowerCase().includes(w) && w.length > 3) ||
+                            com.nom.toLowerCase().split(' ').some(w => k.toLowerCase().includes(w) && w.length > 3)
+                          )
+                          const objData = objKey ? objectifs[objKey] : null
+                          const objCumul = objData ? Object.entries(objData).filter(([m]) => `${anneeStr}-${m.slice(-2)}` <= currentMonth).reduce((s, [, v]) => s + v, 0) : 0
+                          const pctCumul = objCumul > 0 ? Math.round(com.capex / objCumul * 100) : null
+
+                          return (
+                            <tr key={com.nom} onClick={() => setSelCom(com)} className="hover:bg-blue-50 cursor-pointer transition-colors">
+                              <td className="px-4 py-3"><Medal rank={i + 1} /></td>
+                              <td className="px-4 py-3">
+                                <div className="flex items-center gap-2.5">
+                                  <Avatar nom={com.nom} size={8} />
+                                  <div><p className="font-medium text-gray-900 text-sm">{com.nom}</p><p className="text-xs text-gray-400">{com.abo_moyen > 0 ? `Abo. moy. ${fmtFull(com.abo_moyen)}` : '—'}</p></div>
+                                </div>
+                              </td>
+                              <td className="px-4 py-3">
+                                <div className="flex-1 h-1.5 bg-gray-100 rounded-full" style={{ minWidth: 60 }}>
+                                  <div className={`h-1.5 rounded-full ${i < 3 ? 'bg-amber-400' : 'bg-blue-400'}`} style={{ width: `${Math.min(Math.round(com.capex / maxCom * 100), 100)}%` }} />
+                                </div>
+                                <p className="text-sm font-semibold text-gray-800 mt-0.5">{fmtK(com.capex)}</p>
+                              </td>
+                              <td className="px-4 py-3 text-center">
+                                {pctCumul !== null ? (
+                                  <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${pctCumul >= 100 ? 'bg-emerald-100 text-emerald-700' : pctCumul >= 75 ? 'bg-amber-100 text-amber-700' : 'bg-red-100 text-red-600'}`}>
+                                    {pctCumul}%
+                                  </span>
+                                ) : <span className="text-gray-300 text-xs">—</span>}
+                              </td>
+                              <td className="px-4 py-3 text-center"><Trend v={com.tendance_signes} /></td>
+                              <td className="px-4 py-3 text-gray-700 text-sm">{com.signes} <span className="text-xs text-gray-400">contrats</span></td>
+                              <td className="px-4 py-3 text-center">{com.annules > 0 ? <span className="text-red-500 font-medium text-sm">{com.annules} <span className="text-red-400 text-xs">({com.taux_annulation}%)</span></span> : <span className="text-gray-300 text-sm">—</span>}</td>
+                              <td className="px-4 py-3 text-center"><TauxPose v={com.taux_pose} /></td>
+                              <td className="px-4 py-3 text-center text-sm text-gray-600">{com.delai_moy_creation_signature > 0 ? `${com.delai_moy_creation_signature}j` : '—'}</td>
+                              <td className="px-4 py-3 flex justify-center"><Sparkline data={data.months.map(m => com.monthly.find(r => r.month === m)?.signes || 0)} color={i < 3 ? '#f59e0b' : '#60a5fa'} /></td>
+                              <td className="px-4 py-3 text-center text-sm text-gray-600 font-medium">{com.installateurs.length}</td>
+                            </tr>
+                          )
+                        })}
                       </tbody>
                     </table>
                   </div>
@@ -636,10 +625,10 @@ export default function CommercialClient() {
               <div className="space-y-4">
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                   {[
-                    { label: 'À signer',               value: String(data.pipeline_global.en_cours),      sub: `${data.pipeline_global.total} dossiers au total`,        accent: true  },
-                    { label: 'CAPEX restant à signer',  value: fmtK(data.pipeline_global.capex_en_cours), sub: `${fmtK(data.pipeline_global.capex_signe)} déjà signé`,    accent: true  },
-                    { label: 'Déjà signés',            value: String(data.pipeline_global.signes),        sub: `Taux ${data.pipeline_global.taux_conversion}%`,           accent: false },
-                    { label: 'kWc à signer',           value: `${Math.round(data.pipeline_global.kwc_en_cours)} kWc`, sub: `${Math.round(data.pipeline_global.kwc_signe)} kWc signés`, accent: false },
+                    { label: 'À signer',              value: String(data.pipeline_global.en_cours),      sub: `${data.pipeline_global.total} dossiers au total`,        accent: true  },
+                    { label: 'CAPEX restant à signer', value: fmtK(data.pipeline_global.capex_en_cours), sub: `${fmtK(data.pipeline_global.capex_signe)} déjà signé`,    accent: true  },
+                    { label: 'Déjà signés',           value: String(data.pipeline_global.signes),        sub: `Taux ${data.pipeline_global.taux_conversion}%`,           accent: false },
+                    { label: 'kWc à signer',          value: `${Math.round(data.pipeline_global.kwc_en_cours)} kWc`, sub: `${Math.round(data.pipeline_global.kwc_signe)} kWc signés`, accent: false },
                   ].map(({ label, value, sub, accent }) => (
                     <div key={label} className={`kpi-card ${accent ? 'border-l-4 border-l-orange-400' : 'border-l-4 border-l-indigo-400'}`}>
                       <p className="kpi-label">{label}</p>
@@ -651,7 +640,7 @@ export default function CommercialClient() {
                 <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
                   <div className="px-5 py-4 border-b border-gray-100">
                     <h2 className="font-semibold text-gray-900">Pipeline 30 jours par commercial</h2>
-                    <p className="text-xs text-gray-400 mt-0.5">Dossiers édités dans les 30 derniers jours · Trié par CAPEX restant à signer · Cliquez pour voir les dossiers</p>
+                    <p className="text-xs text-gray-400 mt-0.5">Dossiers édités dans les 30 derniers jours · Cliquez pour voir les dossiers</p>
                   </div>
                   <div className="overflow-x-auto">
                     <table className="w-full text-sm">
@@ -659,14 +648,14 @@ export default function CommercialClient() {
                         <tr>
                           <th className="px-4 py-3 text-left text-xs font-semibold text-gray-400 w-10">#</th>
                           <th className="px-4 py-3 text-left text-xs font-semibold text-gray-400">Commercial</th>
-                          <Th label="À signer"          k="en_cours_pipe"   col={pipeSort.col} dir={pipeSort.dir} onSort={pipeSort.toggle} />
+                          <Th label="À signer"       k="en_cours_pipe"   col={pipeSort.col} dir={pipeSort.dir} onSort={pipeSort.toggle} />
                           <th className="px-4 py-3 text-left text-xs font-semibold text-gray-400">Progression</th>
-                          <Th label="CAPEX à signer"    k="capex_en_cours"  col={pipeSort.col} dir={pipeSort.dir} onSort={pipeSort.toggle} />
-                          <Th label="Signés"            k="signes_pipe"     col={pipeSort.col} dir={pipeSort.dir} onSort={pipeSort.toggle} />
-                          <Th label="Taux conv."        k="taux_conversion" col={pipeSort.col} dir={pipeSort.dir} onSort={pipeSort.toggle} />
-                          <Th label="CAPEX signé"       k="capex_signe"     col={pipeSort.col} dir={pipeSort.dir} onSort={pipeSort.toggle} />
-                          <Th label="kWc à signer"      k="kwc_en_cours"    col={pipeSort.col} dir={pipeSort.dir} onSort={pipeSort.toggle} />
-                          <Th label="Délai moy."        k="delai_moy"       col={pipeSort.col} dir={pipeSort.dir} onSort={pipeSort.toggle} />
+                          <Th label="CAPEX à signer" k="capex_en_cours"  col={pipeSort.col} dir={pipeSort.dir} onSort={pipeSort.toggle} />
+                          <Th label="Signés"         k="signes_pipe"     col={pipeSort.col} dir={pipeSort.dir} onSort={pipeSort.toggle} />
+                          <Th label="Taux conv."     k="taux_conversion" col={pipeSort.col} dir={pipeSort.dir} onSort={pipeSort.toggle} />
+                          <Th label="CAPEX signé"    k="capex_signe"     col={pipeSort.col} dir={pipeSort.dir} onSort={pipeSort.toggle} />
+                          <Th label="kWc à signer"   k="kwc_en_cours"    col={pipeSort.col} dir={pipeSort.dir} onSort={pipeSort.toggle} />
+                          <Th label="Délai moy."     k="delai_moy"       col={pipeSort.col} dir={pipeSort.dir} onSort={pipeSort.toggle} />
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-gray-50">
@@ -679,10 +668,10 @@ export default function CommercialClient() {
                               <div className="h-2 bg-gray-100 rounded-full"><div className="h-2 bg-indigo-500 rounded-full" style={{ width: `${pipe.total_pipe ? Math.round(pipe.signes_pipe / pipe.total_pipe * 100) : 0}%` }} /></div>
                               <p className="text-xs text-gray-400 mt-0.5">{pipe.signes_pipe}/{pipe.total_pipe} signés</p>
                             </td>
-                            <td className="px-4 py-3 font-bold text-orange-600">{fmtK(pipe.capex_en_cours)}</td>
+                            <td className="px-4 py-3 font-bold text-orange-600 whitespace-nowrap">{fmtK(pipe.capex_en_cours)}</td>
                             <td className="px-4 py-3 font-medium text-emerald-600">{pipe.signes_pipe}</td>
                             <td className="px-4 py-3"><span className={`font-semibold text-sm ${pipe.taux_conversion >= 70 ? 'text-emerald-600' : pipe.taux_conversion >= 40 ? 'text-amber-600' : 'text-gray-400'}`}>{pipe.taux_conversion}%</span></td>
-                            <td className="px-4 py-3 text-gray-600">{fmtK(pipe.capex_signe)}</td>
+                            <td className="px-4 py-3 text-gray-600 whitespace-nowrap">{fmtK(pipe.capex_signe)}</td>
                             <td className="px-4 py-3 text-gray-600">{pipe.kwc_en_cours.toFixed(1)}</td>
                             <td className="px-4 py-3 text-gray-500 text-sm">{pipe.delai_moy > 0 ? `${pipe.delai_moy}j` : '—'}</td>
                           </tr>
@@ -700,7 +689,6 @@ export default function CommercialClient() {
               <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
                 <div className="px-5 py-4 border-b border-gray-100">
                   <h2 className="font-semibold text-gray-900">Heatmap — Contrats signés par commercial et par mois</h2>
-                  <p className="text-xs text-gray-400 mt-0.5">Cliquez sur un commercial pour voir le détail</p>
                 </div>
                 <div className="p-4 overflow-x-auto">
                   <table className="w-full text-sm">
@@ -777,7 +765,7 @@ export default function CommercialClient() {
                           <td className="px-3 py-2.5"><PctBarCount v={inst.signes} max={maxInst} color="bg-amber-400" /></td>
                           <td className="px-3 py-2.5"><span className={`font-medium ${inst.annules > 0 ? 'text-red-500' : 'text-gray-300'}`}>{inst.annules}</span></td>
                           <td className="px-3 py-2.5"><span className={`text-sm font-medium ${inst.taux_annulation > 20 ? 'text-red-500' : inst.taux_annulation > 10 ? 'text-orange-500' : 'text-gray-400'}`}>{inst.taux_annulation}%</span></td>
-                          <td className="px-3 py-2.5 font-medium text-gray-700">{fmtK(inst.capex)}</td>
+                          <td className="px-3 py-2.5 font-medium text-gray-700 whitespace-nowrap">{fmtK(inst.capex)}</td>
                           <td className="px-3 py-2.5 text-gray-600">{inst.kwc.toFixed(1)}</td>
                           <td className="px-3 py-2.5 text-gray-700">{inst.poses}</td>
                           <td className="px-3 py-2.5"><TauxPose v={inst.taux_pose} /></td>
