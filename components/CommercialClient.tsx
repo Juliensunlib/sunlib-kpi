@@ -122,7 +122,10 @@ function BarChart({ data, months }: { data: MonthlyRow[]; months: string[] }) {
         const s = d?.signes || 0, a = d?.annules || 0
         return (
           <div key={m} className="flex-1 flex flex-col items-center gap-0.5">
-            <div className="w-full flex flex-col justify-end" style={{ height: 108 }}>
+            <div className="w-full flex flex-col justify-end relative" style={{ height: 108 }}>
+              {(s + a) > 0 && (
+                <span className="absolute w-full text-center font-semibold text-gray-600" style={{ fontSize: 9, top: -13 }}>{s + a}</span>
+              )}
               {a > 0 && <div className="w-full bg-red-300 rounded-t-sm" style={{ height: Math.round((a / maxV) * 108) }} />}
               {s > 0 && <div className="w-full bg-amber-400 rounded-t-sm" style={{ height: Math.round((s / maxV) * 108) }} />}
             </div>
@@ -375,7 +378,7 @@ function ComPanel({ com, months, onClose }: { com: ComRow; months: string[]; onC
                             <span className={inst.annules > 0 ? 'text-red-500 font-medium' : 'text-gray-300'}>{inst.annules || '—'}</span>
                           </td>
                           {/* CAPEX */}
-                          <td className="px-3 py-2.5 text-right font-medium text-gray-700">{fmtK(inst.capex)}</td>
+                          <td className="px-3 py-2.5 text-right text-xs font-medium text-gray-700 whitespace-nowrap">{fmtK(inst.capex)}</td>
                           {/* kWc */}
                           <td className="px-3 py-2.5 text-right text-gray-600">{inst.kwc.toFixed(1)}</td>
                           {/* Poses */}
