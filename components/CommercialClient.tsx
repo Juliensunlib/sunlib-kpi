@@ -22,7 +22,7 @@ type ViewType = 'leaderboard' | 'pipeline' | 'heatmap' | 'installateurs'
 
 // ─── Formatters ───────────────────────────────────────────────────────────────
 const fmtK = (v: number) => {
-  if (v >= 1_000_000) return new Intl.NumberFormat('fr-FR', { maximumFractionDigits: 0 }).format(v) + ' €'
+  if (v >= 1_000_000) return `${(v / 1_000_000).toFixed(3)} M€`
   if (v >= 1_000) return `${Math.round(v / 1_000)}k€`
   return `${Math.round(v)}€`
 }
