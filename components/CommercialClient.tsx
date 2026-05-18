@@ -631,7 +631,7 @@ export default function CommercialClient() {
               {[
                 { label: 'Contrats signés',       value: String(data.meta.total_signes),        sub: '',                                                           red: false },
                 { label: 'Annulés',               value: String(data.meta.total_annules),       sub: `Taux ${data.meta.taux_annulation_global}%`,                  red: true  },
-                { label: 'Commerciaux actifs',    value: String(data.meta.total_commerciaux),   sub: '',                                                           red: false },
+                { label: 'CAPEX signé HT',        value: fmtK(data.par_commercial.reduce((s, c) => s + c.capex, 0)), sub: mois ? `filtre mois actif` : annee ? `année ${annee}` : 'toutes périodes', red: false },
                 { label: 'Installateurs actifs',  value: String(data.meta.total_installateurs), sub: '',                                                           red: false },
                 { label: 'À signer (30j)',         value: String(data.pipeline_global.en_cours), sub: `${fmtK(data.pipeline_global.capex_en_cours)} CAPEX restant`, red: false },
               ].map(({ label, value, sub, red }) => (
