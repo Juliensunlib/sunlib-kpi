@@ -188,15 +188,13 @@ function ObjectifsView({ data, objectifs, anneeFilter }: { data: ApiData; object
   const pctColor = (pct: number | null) => {
     if (pct === null) return 'text-gray-400'
     if (pct >= 100) return 'text-emerald-600'
-    if (pct >= 75)  return 'text-amber-600'
-    if (pct >= 50)  return 'text-orange-500'
+    if (pct >= 70)  return 'text-orange-500'
     return 'text-red-500'
   }
   const pctBg = (pct: number | null, isPast: boolean) => {
     if (!isPast || pct === null) return ''
     if (pct >= 100) return 'bg-emerald-50'
-    if (pct >= 75)  return 'bg-amber-50'
-    if (pct >= 50)  return 'bg-orange-50'
+    if (pct >= 70)  return 'bg-orange-50'
     return 'bg-red-50'
   }
 
@@ -210,9 +208,8 @@ function ObjectifsView({ data, objectifs, anneeFilter }: { data: ApiData; object
           </div>
           <div className="flex items-center gap-2 text-xs text-gray-500">
             <span className="flex items-center gap-1"><span className="w-3 h-3 rounded bg-emerald-100 inline-block" /> ≥100%</span>
-            <span className="flex items-center gap-1"><span className="w-3 h-3 rounded bg-amber-50 inline-block" /> 75-99%</span>
-            <span className="flex items-center gap-1"><span className="w-3 h-3 rounded bg-orange-50 inline-block" /> 50-74%</span>
-            <span className="flex items-center gap-1"><span className="w-3 h-3 rounded bg-red-50 inline-block" /> &lt;50%</span>
+            <span className="flex items-center gap-1"><span className="w-3 h-3 rounded bg-orange-100 inline-block" /> 70-99%</span>
+            <span className="flex items-center gap-1"><span className="w-3 h-3 rounded bg-red-100 inline-block" /> &lt;70%</span>
           </div>
         </div>
       </div>
@@ -591,7 +588,7 @@ export default function CommercialClient() {
     { id: 'pipeline',      label: '🔄 Pipeline 30j'   },
     { id: 'heatmap',       label: '🗓️ Heatmap'        },
     { id: 'installateurs', label: '🏗️ Installateurs'  },
-    { id: 'objectifs',     label: '🎯 Objectifs'       },
+    ...(role === 'admin' ? [{ id: 'objectifs' as ViewType, label: '🎯 Objectifs' }] : []),
   ]
 
   return (
