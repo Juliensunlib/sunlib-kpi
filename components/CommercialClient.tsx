@@ -17,8 +17,9 @@ interface ApiData {
   meta: { total_signes: number; total_annules: number; taux_annulation_global: number; total_commerciaux: number; total_installateurs: number }
 }
 type Objectifs = Record<string, Record<string, Record<string, number>>>
+interface DossierSoumis { id: string; nom: string; entreprise: string; segment: string; commercial: string; date_creation: string; date_edition: string; capex: number; kwc: number; installateur: string; pct_reussite: string; mois_signature: string }
 type SortDir = 'asc' | 'desc'
-type ViewType = 'leaderboard' | 'pipeline' | 'heatmap' | 'installateurs' | 'objectifs'
+type ViewType = 'leaderboard' | 'pipeline' | 'heatmap' | 'installateurs' | 'objectifs' | 'dossiers'
 
 // ─── Formatters ───────────────────────────────────────────────────────────────
 const fmtK = (v: number) => {
@@ -31,9 +32,7 @@ const fmtDate = (s: string) => { if (!s) return '—'; try { return new Date(s).
 
 // ─── Match nom flexible ───────────────────────────────────────────────────────
 function normalize(s: string): string {
-  return s.toLowerCase()
-    .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
-    .replace(/[^a-z0-9\s]/g, '').trim()
+  return s.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9\s]/g, '').trim()
 }
 function matchNom(comNom: string, objNom: string): boolean {
   const a = normalize(comNom).split(/\s+/).filter(w => w.length > 2)
@@ -145,35 +144,27 @@ const MOIS_LABELS: Record<string, string> = {
 function ObjectifsView({ data, objectifs, anneeFilter }: { data: ApiData; objectifs: Objectifs; anneeFilter: string }) {
   const annee = anneeFilter || new Date().getFullYear().toString()
   const objAnnee = objectifs[annee] || {}
-  const currentMonth = new Date().toISOString().slice(0, 7) // "2026-05"
-  const currentMM = currentMonth.slice(5, 7) // "05"
-
+  const currentMonth = new Date().toISOString().slice(0, 7)
+  const currentMM = currentMonth.slice(5, 7)
   const mois = ['01','02','03','04','05','06','07','08','09','10','11','12']
 
-  // Construire la liste des commerciaux avec matching
-  const rows = data.par_commercial
-    .filter(c => c.nom !== 'Non assigné')
-    .map(com => {
-      const objKey = Object.keys(objAnnee).find(k => matchNom(com.nom, k))
-      const objMois = objKey ? objAnnee[objKey] : null
-
-      const moisData = mois.map(mm => {
-        const monthStr = `${annee}-${mm}`
-        const realise  = com.monthly.find(r => r.month === monthStr)?.capex || 0
-        const objectif = objMois ? (objMois[mm] || 0) : null
-        const pct      = objectif && objectif > 0 ? Math.round(realise / objectif * 100) : null
-        const isPast   = mm <= currentMM
-        return { mm, monthStr, realise, objectif, pct, isPast }
-      })
-
-      const totalRealise  = moisData.reduce((s, m) => s + m.realise, 0)
-      const totalObjectif = objMois ? Object.values(objMois).reduce((s, v) => s + v, 0) : null
-      const totalPct      = totalObjectif && totalObjectif > 0 ? Math.round(totalRealise / totalObjectif * 100) : null
-
-      return { com, moisData, totalRealise, totalObjectif, totalPct, hasObj: !!objMois }
+  const rows = data.par_commercial.filter(c => c.nom !== 'Non assigné').map(com => {
+    const objKey = Object.keys(objAnnee).find(k => matchNom(com.nom, k))
+    const objMois = objKey ? objAnnee[objKey] : null
+    const moisData = mois.map(mm => {
+      const monthStr = `${annee}-${mm}`
+      const realise  = com.monthly.find(r => r.month === monthStr)?.capex || 0
+      const objectif = objMois ? (objMois[mm] || 0) : null
+      const pct      = objectif && objectif > 0 ? Math.round(realise / objectif * 100) : null
+      const isPast   = mm <= currentMM
+      return { mm, monthStr, realise, objectif, pct, isPast }
     })
+    const totalRealise  = moisData.reduce((s, m) => s + m.realise, 0)
+    const totalObjectif = objMois ? Object.values(objMois).reduce((s, v) => s + v, 0) : null
+    const totalPct      = totalObjectif && totalObjectif > 0 ? Math.round(totalRealise / totalObjectif * 100) : null
+    return { com, moisData, totalRealise, totalObjectif, totalPct }
+  })
 
-  // Totaux colonnes
   const colTotaux = mois.map(mm => {
     const monthStr  = `${annee}-${mm}`
     const realTotal = data.par_commercial.reduce((s, c) => s + (c.monthly.find(r => r.month === monthStr)?.capex || 0), 0)
@@ -204,7 +195,7 @@ function ObjectifsView({ data, objectifs, anneeFilter }: { data: ApiData; object
         <div className="flex items-center justify-between">
           <div>
             <h2 className="font-semibold text-gray-900">🎯 Suivi des objectifs CAPEX {annee}</h2>
-            <p className="text-xs text-gray-400 mt-0.5">Réalisé vs objectif mensuel · Mois passés colorés · Objectifs modifiables dans <code className="bg-gray-100 px-1 rounded">data/objectifs.json</code></p>
+            <p className="text-xs text-gray-400 mt-0.5">Réalisé vs objectif mensuel · Objectifs modifiables dans <code className="bg-gray-100 px-1 rounded">data/objectifs.json</code></p>
           </div>
           <div className="flex items-center gap-2 text-xs text-gray-500">
             <span className="flex items-center gap-1"><span className="w-3 h-3 rounded bg-emerald-100 inline-block" /> ≥100%</span>
@@ -213,7 +204,6 @@ function ObjectifsView({ data, objectifs, anneeFilter }: { data: ApiData; object
           </div>
         </div>
       </div>
-
       <div className="overflow-x-auto">
         <table className="w-full text-xs border-collapse">
           <thead className="bg-gray-50 border-b border-gray-200">
@@ -221,8 +211,7 @@ function ObjectifsView({ data, objectifs, anneeFilter }: { data: ApiData; object
               <th className="px-3 py-3 text-left font-semibold text-gray-600 sticky left-0 bg-gray-50 z-10" style={{ minWidth: 160 }}>Commercial</th>
               {mois.map(mm => (
                 <th key={mm} className={`px-2 py-3 text-center font-semibold ${mm === currentMM ? 'text-blue-600 bg-blue-50' : 'text-gray-500'}`} style={{ minWidth: 80 }}>
-                  {MOIS_LABELS[mm]}
-                  {mm === currentMM && <span className="ml-1 text-blue-400">●</span>}
+                  {MOIS_LABELS[mm]}{mm === currentMM && <span className="ml-1 text-blue-400">●</span>}
                 </th>
               ))}
               <th className="px-3 py-3 text-center font-semibold text-gray-700 bg-gray-100" style={{ minWidth: 110 }}>Total annuel</th>
@@ -246,8 +235,7 @@ function ObjectifsView({ data, objectifs, anneeFilter }: { data: ApiData; object
                         <div className="text-gray-400">{fmtK(objectif)}</div>
                         {isPast && pct !== null && (
                           <div className="mt-1 h-0.5 bg-gray-200 rounded-full">
-                            <div className={`h-0.5 rounded-full ${pct >= 100 ? 'bg-emerald-500' : pct >= 75 ? 'bg-amber-400' : 'bg-red-400'}`}
-                              style={{ width: `${Math.min(pct, 100)}%` }} />
+                            <div className={`h-0.5 rounded-full ${pct >= 100 ? 'bg-emerald-500' : pct >= 70 ? 'bg-orange-400' : 'bg-red-400'}`} style={{ width: `${Math.min(pct, 100)}%` }} />
                           </div>
                         )}
                       </div>
@@ -271,7 +259,6 @@ function ObjectifsView({ data, objectifs, anneeFilter }: { data: ApiData; object
               </tr>
             ))}
           </tbody>
-          {/* Ligne totaux */}
           <tfoot className="border-t-2 border-gray-300">
             <tr className="bg-gray-100">
               <td className="px-3 py-2.5 font-bold text-gray-700 sticky left-0 bg-gray-100 z-10 border-r border-gray-200">TOTAL ÉQUIPE</td>
@@ -291,6 +278,139 @@ function ObjectifsView({ data, objectifs, anneeFilter }: { data: ApiData; object
           </tfoot>
         </table>
       </div>
+    </div>
+  )
+}
+
+// ─── Vue Dossiers Soumis ──────────────────────────────────────────────────────
+const PCT_OPTIONS  = ['', '0%', '25%', '50%', '75%', '100%']
+const MOIS_OPTIONS = ['', 'Janvier', 'Février', 'Mars', 'Avril', 'Mai', 'Juin', 'Juillet', 'Aout', 'Septembre', 'Octobre', 'Décembre']
+
+function pctBadgeColor(pct: string) {
+  if (pct === '100%') return 'text-emerald-600 bg-emerald-50'
+  if (pct === '75%')  return 'text-orange-500 bg-orange-50'
+  if (pct === '50%')  return 'text-orange-500 bg-orange-50'
+  if (pct === '25%' || pct === '0%') return 'text-red-500 bg-red-50'
+  return 'text-gray-400 bg-gray-50'
+}
+
+function DossiersSoumisView({ dossiers, loading, onMount, onUpdate }: {
+  dossiers: DossierSoumis[]
+  loading: boolean
+  onMount: () => void
+  onUpdate: (id: string, pct?: string, mois?: string) => void
+}) {
+  const [mounted, setMounted]  = useState(false)
+  const [search, setSearch]    = useState('')
+  const [filterCom, setFilter] = useState('')
+
+  useEffect(() => {
+    if (!mounted) { setMounted(true); onMount() }
+  }, [mounted, onMount])
+
+  const commerciaux = Array.from(new Set(dossiers.map(d => d.commercial))).sort()
+
+  const filtered = dossiers.filter(d => {
+    const matchCom    = !filterCom || d.commercial === filterCom
+    const matchSearch = !search || d.nom.toLowerCase().includes(search.toLowerCase()) || d.entreprise.toLowerCase().includes(search.toLowerCase()) || d.installateur.toLowerCase().includes(search.toLowerCase())
+    return matchCom && matchSearch
+  })
+
+  const grouped = commerciaux
+    .filter(c => !filterCom || c === filterCom)
+    .map(c => ({ commercial: c, items: filtered.filter(d => d.commercial === c) }))
+    .filter(g => g.items.length > 0)
+
+  return (
+    <div className="space-y-4">
+      <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4">
+        <div className="flex items-center gap-4 flex-wrap">
+          <div className="flex-1">
+            <h2 className="font-semibold text-gray-900">📋 Dossiers soumis</h2>
+            <p className="text-xs text-gray-400 mt-0.5">
+              Dossiers sans contrat signé ni statut — {dossiers.length} au total · % réussite et mois de signature éditables directement
+            </p>
+          </div>
+          <input type="text" placeholder="Rechercher abonné, installateur…" value={search} onChange={e => setSearch(e.target.value)}
+            className="text-sm border border-gray-200 rounded-lg px-3 py-1.5 w-64 focus:outline-none focus:ring-2 focus:ring-blue-300" />
+          <select value={filterCom} onChange={e => setFilter(e.target.value)} className="text-sm border border-gray-200 rounded-lg px-3 py-1.5 bg-white">
+            <option value="">Tous les commerciaux</option>
+            {commerciaux.map(c => <option key={c} value={c}>{c}</option>)}
+          </select>
+          <button onClick={onMount} className="text-sm px-3 py-1.5 border border-gray-200 rounded-lg hover:bg-gray-50 text-gray-600">↺ Actualiser</button>
+        </div>
+      </div>
+
+      {loading && (
+        <div className="flex items-center justify-center py-20">
+          <div className="w-8 h-8 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
+        </div>
+      )}
+
+      {!loading && grouped.map(({ commercial, items }) => (
+        <div key={commercial} className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+          <div className="px-5 py-3 border-b border-gray-100 flex items-center gap-3">
+            <Avatar nom={commercial} size={8} />
+            <div>
+              <h3 className="font-semibold text-gray-900">{commercial}</h3>
+              <p className="text-xs text-gray-400">{items.length} dossier{items.length > 1 ? 's' : ''} soumis</p>
+            </div>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead className="bg-gray-50 border-b border-gray-100">
+                <tr>
+                  <th className="px-3 py-2 text-left text-xs font-semibold text-gray-500">Abonné / Entreprise</th>
+                  <th className="px-3 py-2 text-left text-xs font-semibold text-gray-500">Segment</th>
+                  <th className="px-3 py-2 text-right text-xs font-semibold text-gray-500">CAPEX</th>
+                  <th className="px-3 py-2 text-right text-xs font-semibold text-gray-500">kWc</th>
+                  <th className="px-3 py-2 text-left text-xs font-semibold text-gray-500">Installateur</th>
+                  <th className="px-3 py-2 text-center text-xs font-semibold text-gray-500">Créé le</th>
+                  <th className="px-3 py-2 text-center text-xs font-semibold text-gray-500 bg-amber-50">% Réussite</th>
+                  <th className="px-3 py-2 text-center text-xs font-semibold text-gray-500 bg-blue-50">Mois signature</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-50">
+                {items.map(d => (
+                  <tr key={d.id} className="hover:bg-gray-50 transition-colors">
+                    <td className="px-3 py-2.5">
+                      <p className="font-medium text-gray-800 text-sm truncate max-w-[180px]">{d.nom}</p>
+                      {d.entreprise && <p className="text-xs text-gray-400 truncate max-w-[180px]">{d.entreprise}</p>}
+                    </td>
+                    <td className="px-3 py-2.5">
+                      <span className={`text-xs px-1.5 py-0.5 rounded-full font-medium ${d.segment === 'Pro' ? 'bg-blue-100 text-blue-700' : 'bg-amber-100 text-amber-700'}`}>
+                        {d.segment || '—'}
+                      </span>
+                    </td>
+                    <td className="px-3 py-2.5 text-right font-medium text-gray-700 whitespace-nowrap text-xs">{fmtK(d.capex)}</td>
+                    <td className="px-3 py-2.5 text-right text-gray-600 text-xs">{d.kwc > 0 ? d.kwc.toFixed(1) : '—'}</td>
+                    <td className="px-3 py-2.5 text-xs text-gray-600 truncate max-w-[140px]">{d.installateur || '—'}</td>
+                    <td className="px-3 py-2.5 text-center text-xs text-gray-500">{fmtDate(d.date_creation)}</td>
+                    <td className="px-3 py-2.5 text-center bg-amber-50/50">
+                      <select value={d.pct_reussite} onChange={e => onUpdate(d.id, e.target.value, undefined)}
+                        className={`text-xs font-semibold px-2 py-1 rounded-lg border-0 cursor-pointer focus:ring-2 focus:ring-amber-300 ${pctBadgeColor(d.pct_reussite)}`}>
+                        {PCT_OPTIONS.map(o => <option key={o} value={o}>{o || '—'}</option>)}
+                      </select>
+                    </td>
+                    <td className="px-3 py-2.5 text-center bg-blue-50/50">
+                      <select value={d.mois_signature} onChange={e => onUpdate(d.id, undefined, e.target.value)}
+                        className="text-xs text-blue-700 bg-blue-50 px-2 py-1 rounded-lg border-0 cursor-pointer focus:ring-2 focus:ring-blue-300">
+                        {MOIS_OPTIONS.map(o => <option key={o} value={o}>{o || '—'}</option>)}
+                      </select>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      ))}
+
+      {!loading && grouped.length === 0 && (
+        <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-12 text-center">
+          <p className="text-gray-400 text-sm">Aucun dossier soumis trouvé</p>
+        </div>
+      )}
     </div>
   )
 }
@@ -367,7 +487,7 @@ function ComPanel({ com, months, onClose }: { com: ComRow; months: string[]; onC
   const [sel, setSel]           = useState<InstRow | null>(null)
   const [selMonth, setSelMonth] = useState<string | null>(null)
 
-  const maxInst  = Math.max(...com.installateurs.map(i => i.signes), 1)
+  const maxInst   = Math.max(...com.installateurs.map(i => i.signes), 1)
   const monthData = selMonth ? com.monthly.find(r => r.month === selMonth) : null
   const mLabel    = monthData?.label || selMonth?.slice(5) || ''
 
@@ -530,6 +650,8 @@ export default function CommercialClient() {
   const [search, setSearch]       = useState('')
   const [role, setRole]           = useState('')
   const [objectifs, setObjectifs] = useState<Objectifs>({})
+  const [dossiers, setDossiers]   = useState<DossierSoumis[]>([])
+  const [dossLoading, setDossLoad] = useState(false)
 
   useEffect(() => {
     fetch('/api/auth').then(r => r.json()).then(j => setRole(j.role || ''))
@@ -552,6 +674,29 @@ export default function CommercialClient() {
       setData(json)
     } catch (e) { setError(String(e)) }
     setLoading(false)
+  }
+
+  async function loadDossiers() {
+    setDossLoad(true)
+    try {
+      const res  = await fetch('/api/dossiers-soumis')
+      const json = await res.json()
+      setDossiers(json.dossiers || [])
+    } catch { /**/ }
+    setDossLoad(false)
+  }
+
+  async function updateDossier(recordId: string, pct_reussite?: string, mois_signature?: string) {
+    await fetch('/api/dossiers-soumis', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ recordId, pct_reussite, mois_signature }),
+    })
+    setDossiers(prev => prev.map(d => d.id === recordId ? {
+      ...d,
+      ...(pct_reussite   !== undefined ? { pct_reussite }   : {}),
+      ...(mois_signature !== undefined ? { mois_signature }  : {}),
+    } : d))
   }
 
   useEffect(() => { load('', '') }, [])
@@ -588,6 +733,7 @@ export default function CommercialClient() {
     { id: 'pipeline',      label: '🔄 Pipeline 30j'   },
     { id: 'heatmap',       label: '🗓️ Heatmap'        },
     { id: 'installateurs', label: '🏗️ Installateurs'  },
+    { id: 'dossiers',      label: '📋 Dossiers soumis' },
     ...(role === 'admin' ? [{ id: 'objectifs' as ViewType, label: '🎯 Objectifs' }] : []),
   ]
 
@@ -625,15 +771,20 @@ export default function CommercialClient() {
         {loading && <div className="flex items-center justify-center py-32"><div className="text-center"><div className="w-10 h-10 border-2 border-blue-600 border-t-transparent rounded-full animate-spin mx-auto mb-3" /><p className="text-sm text-gray-500">Chargement…</p></div></div>}
         {error && <div className="bg-red-50 border border-red-200 rounded-xl p-5"><p className="font-semibold text-red-700">{error}</p></div>}
 
-        {!loading && !error && data && (
+        {/* Vue Dossiers : pas besoin des données principales */}
+        {view === 'dossiers' && (
+          <DossiersSoumisView dossiers={dossiers} loading={dossLoading} onMount={loadDossiers} onUpdate={updateDossier} />
+        )}
+
+        {!loading && !error && data && view !== 'dossiers' && (
           <>
             <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
               {[
-                { label: 'Contrats signés',       value: String(data.meta.total_signes),        sub: '',                                                           red: false },
-                { label: 'Annulés',               value: String(data.meta.total_annules),       sub: `Taux ${data.meta.taux_annulation_global}%`,                  red: true  },
-                { label: 'CAPEX signé HT',        value: fmtK(data.par_commercial.reduce((s, c) => s + c.capex, 0)), sub: mois ? `filtre mois actif` : annee ? `année ${annee}` : 'toutes périodes', red: false },
-                { label: 'Installateurs actifs',  value: String(data.meta.total_installateurs), sub: '',                                                           red: false },
-                { label: 'À signer (30j)',         value: String(data.pipeline_global.en_cours), sub: `${fmtK(data.pipeline_global.capex_en_cours)} CAPEX restant`, red: false },
+                { label: 'Contrats signés',      value: String(data.meta.total_signes),        sub: '',                                                           red: false },
+                { label: 'Annulés',              value: String(data.meta.total_annules),       sub: `Taux ${data.meta.taux_annulation_global}%`,                  red: true  },
+                { label: 'CAPEX signé HT',       value: fmtK(data.par_commercial.reduce((s, c) => s + c.capex, 0)), sub: mois ? 'filtre mois actif' : annee ? `année ${annee}` : 'toutes périodes', red: false },
+                { label: 'Installateurs actifs', value: String(data.meta.total_installateurs), sub: '',                                                           red: false },
+                { label: 'À signer (30j)',        value: String(data.pipeline_global.en_cours), sub: `${fmtK(data.pipeline_global.capex_en_cours)} CAPEX restant`, red: false },
               ].map(({ label, value, sub, red }) => (
                 <div key={label} className="kpi-card">
                   <p className="kpi-label">{label}</p>
@@ -868,8 +1019,8 @@ export default function CommercialClient() {
               </div>
             )}
 
-            {/* ── OBJECTIFS ── */}
-            {view === 'objectifs' && (
+            {/* ── OBJECTIFS (admin seulement) ── */}
+            {view === 'objectifs' && role === 'admin' && (
               <ObjectifsView data={data} objectifs={objectifs} anneeFilter={annee} />
             )}
           </>
