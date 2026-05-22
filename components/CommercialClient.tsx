@@ -321,8 +321,53 @@ function DossiersSoumisView({ dossiers, loading, onMount, onUpdate }: {
     .map(c => ({ commercial: c, items: filtered.filter(d => d.commercial === c) }))
     .filter(g => g.items.length > 0)
 
+  // ── Calcul des cards stats ──────────────────────────────────────────────────
+  const capexTotal    = dossiers.reduce((s, d) => s + d.capex, 0)
+  const sansPct       = dossiers.filter(d => !d.pct_reussite)
+  const capexSansPct  = sansPct.reduce((s, d) => s + d.capex, 0)
+  const statsPct = PCT_OPTIONS.filter(o => o !== '').map(pct => ({
+    pct,
+    items: dossiers.filter(d => d.pct_reussite === pct),
+    capex: dossiers.filter(d => d.pct_reussite === pct).reduce((s, d) => s + d.capex, 0),
+  }))
+
   return (
     <div className="space-y-4">
+      {/* ── Cards stats ── */}
+      {!loading && dossiers.length > 0 && (
+        <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-8 gap-3">
+          {/* Card total */}
+          <div className="kpi-card col-span-2 md:col-span-2 border-l-4 border-l-gray-400">
+            <p className="kpi-label">CAPEX total soumis</p>
+            <p className="kpi-value">{fmtK(capexTotal)}</p>
+            <p className="kpi-sub">{dossiers.length} dossiers</p>
+          </div>
+          {/* Card sans % */}
+          <div className="kpi-card border-l-4 border-l-gray-300">
+            <p className="kpi-label">Sans % renseigné</p>
+            <p className="kpi-value text-gray-500">{fmtK(capexSansPct)}</p>
+            <p className="kpi-sub">{sansPct.length} dossiers</p>
+          </div>
+          {/* Cards par % */}
+          {statsPct.map(({ pct, items, capex }) => (
+            <div key={pct} className={`kpi-card border-l-4 ${
+              pct === '100%' ? 'border-l-emerald-500' :
+              pct === '75%'  ? 'border-l-orange-400' :
+              pct === '50%'  ? 'border-l-orange-400' :
+              'border-l-red-400'
+            }`}>
+              <p className="kpi-label">{pct}</p>
+              <p className={`kpi-value ${
+                pct === '100%' ? 'text-emerald-600' :
+                pct === '75%' || pct === '50%' ? 'text-orange-500' :
+                'text-red-500'
+              }`}>{fmtK(capex)}</p>
+              <p className="kpi-sub">{items.length} dossier{items.length > 1 ? 's' : ''}</p>
+            </div>
+          ))}
+        </div>
+      )}
+
       <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4">
         <div className="flex items-center gap-4 flex-wrap">
           <div className="flex-1">
