@@ -13,7 +13,6 @@ const F = {
   SEGMENT:        'fld3SpiGzcJrADLgL',
   COMMERCIAL:     'fld6NSEZ0UeZMdomL',
   DATE_CREATION:  'fldxygbu165RonF4P',
-  DATE_EDITION:   'fldsjH7EmfCDgvF1t',
   CAPEX:          'fldplSMBmal4BFo3O',
   KWC:            'fldTJkt211i53Ktmy',
   INSTALLATEUR:   'fldjUg9dVe5LrbX9i',
@@ -21,7 +20,6 @@ const F = {
   STATUT_ABONNE:  'fldNBDnMAaxdSXEvR',
   PCT_REUSSITE:   'fldbIyoDdMo5RaHdp',
   MOIS_SIGNATURE: 'fldKe5WC67JAygPWV',
-  STATUT_ABONNE:  'fldNBDnMAaxdSXEvR',
 }
 
 function str(v: unknown): string {
@@ -30,9 +28,11 @@ function str(v: unknown): string {
   if (Array.isArray(v) && v.length > 0) {
     const first = v[0]
     if (typeof first === 'string') return first
-    if (typeof first === 'object' && first !== null && 'name' in first) return String((first as {name: unknown}).name)
+    if (typeof first === 'object' && first !== null && 'name' in first)
+      return String((first as { name: unknown }).name)
   }
-  if (typeof v === 'object' && v !== null && 'name' in v) return String((v as {name: unknown}).name)
+  if (typeof v === 'object' && v !== null && 'name' in v)
+    return String((v as { name: unknown }).name)
   return ''
 }
 
@@ -44,7 +44,7 @@ function num(v: unknown): number {
 type Rec = { id: string; fields: Record<string, unknown> }
 
 async function fetchAll(): Promise<Rec[]> {
-  const fqs  = Object.values(F).map(f => `fields[]=${f}`).join('&')
+  const fqs = Object.values(F).map(f => `fields[]=${f}`).join('&')
   const all: Rec[] = []
   let offset: string | undefined
   do {
@@ -63,36 +63,42 @@ export async function GET() {
     const records = await fetchAll()
 
     // Filtre : contrat non signé VIDE + statut abonné VIDE
-    const dossiers = records.filter(r => {
-      const contratNS = r.fields[F.CONTRAT_NS]
-      const statut    = r.fields[F.STATUT_ABONNE]
-      const hasContratNS = Array.isArray(contratNS) && contratNS.length > 0
-      const hasStatut    = !!statut
-      return !hasContratNS && !hasStatut
-    }).map(r => {
-      const f    = r.fields
-      const inst = f[F.INSTALLATEUR]
-      let instNom = ''
-      if (Array.isArray(inst) && inst.length > 0) {
-        const first = inst[0]
-        instNom = typeof first === 'string' ? first : (typeof first === 'object' && first !== null && 'name' in first ? String((first as {name: unknown}).name) : '')
-      }
-      return {
-        id:           r.id,
-        nom:          `${str(f[F.PRENOM])} ${str(f[F.NOM])}`.trim() || str(f[F.ENTREPRISE]) || '—',
-        entreprise:   str(f[F.ENTREPRISE]),
-        segment:      str(f[F.SEGMENT]),
-        commercial:   str(f[F.COMMERCIAL]) || 'Non assigné',
-        date_creation: str(f[F.DATE_CREATION]),
-        date_edition:  str(f[F.DATE_EDITION]),
-        capex:        num(f[F.CAPEX]),
-        kwc:          num(f[F.KWC]),
-        installateur: instNom,
-        pct_reussite:   str(f[F.PCT_REUSSITE]),
-        mois_signature: str(f[F.MOIS_SIGNATURE]),
-        statut_abonne:  str(f[F.STATUT_ABONNE]),
-      }
-    }).sort((a, b) => a.commercial.localeCompare(b.commercial))
+    const dossiers = records
+      .filter(r => {
+        const contratNS = r.fields[F.CONTRAT_NS]
+        const statut    = r.fields[F.STATUT_ABONNE]
+        const hasContratNS = Array.isArray(contratNS) && contratNS.length > 0
+        const hasStatut    = !!statut
+        return !hasContratNS && !hasStatut
+      })
+      .map(r => {
+        const f    = r.fields
+        const inst = f[F.INSTALLATEUR]
+        let instNom = ''
+        if (Array.isArray(inst) && inst.length > 0) {
+          const first = inst[0]
+          instNom = typeof first === 'string'
+            ? first
+            : (typeof first === 'object' && first !== null && 'name' in first
+                ? String((first as { name: unknown }).name)
+                : '')
+        }
+        return {
+          id:             r.id,
+          nom:            (`${str(f[F.PRENOM])} ${str(f[F.NOM])}`).trim() || str(f[F.ENTREPRISE]) || '—',
+          entreprise:     str(f[F.ENTREPRISE]),
+          segment:        str(f[F.SEGMENT]),
+          commercial:     str(f[F.COMMERCIAL]) || 'Non assigné',
+          date_creation:  str(f[F.DATE_CREATION]),
+          capex:          num(f[F.CAPEX]),
+          kwc:            num(f[F.KWC]),
+          installateur:   instNom,
+          pct_reussite:   str(f[F.PCT_REUSSITE]),
+          mois_signature: str(f[F.MOIS_SIGNATURE]),
+          statut_abonne:  str(f[F.STATUT_ABONNE]),
+        }
+      })
+      .sort((a, b) => a.commercial.localeCompare(b.commercial))
 
     return NextResponse.json({ dossiers, total: dossiers.length })
   } catch (e) {
@@ -103,7 +109,10 @@ export async function GET() {
 export async function PATCH(req: NextRequest) {
   try {
     const { recordId, pct_reussite, mois_signature, statut_abonne } = await req.json() as {
-      recordId: string; pct_reussite?: string; mois_signature?: string; statut_abonne?: string
+      recordId: string
+      pct_reussite?: string
+      mois_signature?: string
+      statut_abonne?: string
     }
     if (!recordId) return NextResponse.json({ error: 'recordId requis' }, { status: 400 })
 
