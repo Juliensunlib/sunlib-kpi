@@ -17,7 +17,7 @@ interface ApiData {
   meta: { total_signes: number; total_annules: number; taux_annulation_global: number; total_commerciaux: number; total_installateurs: number }
 }
 type Objectifs = Record<string, Record<string, Record<string, number>>>
-interface DossierSoumis { id: string; nom: string; entreprise: string; segment: string; commercial: string; date_creation: string; capex: number; kwc: number; installateur: string; pct_reussite: string; mois_signature: string }
+interface DossierSoumis { id: string; nom: string; entreprise: string; segment: string; commercial: string; date_creation: string; capex: number; kwc: number; installateur: string; pct_reussite: string; mois_signature: string; statut_abonne: string }
 type SortDir = 'asc' | 'desc'
 type ViewType = 'leaderboard' | 'pipeline' | 'heatmap' | 'installateurs' | 'objectifs' | 'dossiers'
 
@@ -252,7 +252,7 @@ function DossiersSoumisView({ dossiers, loading, onMount, onUpdate }: {
   dossiers: DossierSoumis[]
   loading: boolean
   onMount: () => void
-  onUpdate: (id: string, pct?: string, mois?: string) => void
+  onUpdate: (id: string, pct?: string, mois?: string, statut?: string) => void
 }) {
   const [mounted, setMounted]     = useState(false)
   const [search, setSearch]       = useState('')
@@ -377,6 +377,7 @@ function DossiersSoumisView({ dossiers, loading, onMount, onUpdate }: {
                       <th className="px-3 py-2 text-center text-xs font-semibold text-gray-500">Créé le</th>
                       <th className="px-3 py-2 text-center text-xs font-semibold text-gray-500 bg-amber-50">% Réussite</th>
                       <th className="px-3 py-2 text-center text-xs font-semibold text-gray-500 bg-blue-50">Mois signature</th>
+                      <th className="px-3 py-2 text-center text-xs font-semibold text-gray-500 bg-red-50">Statut</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-50">
@@ -405,6 +406,20 @@ function DossiersSoumisView({ dossiers, loading, onMount, onUpdate }: {
                           <select value={d.mois_signature} onChange={e => onUpdate(d.id, undefined, e.target.value)}
                             className="text-xs text-blue-700 bg-blue-50 px-2 py-1 rounded-lg border-0 cursor-pointer focus:ring-2 focus:ring-blue-300">
                             {MOIS_OPTIONS.map(o => <option key={o} value={o}>{o || '—'}</option>)}
+                          </select>
+                        </td>
+                        <td className="px-3 py-2.5 text-center bg-red-50/50">
+                          <select value={d.statut_abonne} onChange={e => onUpdate(d.id, undefined, undefined, e.target.value)}
+                            className={`text-xs font-semibold px-2 py-1 rounded-lg border-0 cursor-pointer focus:ring-2 focus:ring-red-300 ${
+                              d.statut_abonne === 'Annulé'  ? 'text-red-600 bg-red-50' :
+                              d.statut_abonne === 'Refusé'  ? 'text-orange-600 bg-orange-50' :
+                              d.statut_abonne === 'Repris'  ? 'text-emerald-600 bg-emerald-50' :
+                              'text-gray-400 bg-gray-50'
+                            }`}>
+                            <option value="">—</option>
+                            <option value="Annulé">Annulé</option>
+                            <option value="Repris">Repris</option>
+                            <option value="Refusé">Refusé</option>
                           </select>
                         </td>
                       </tr>
@@ -628,9 +643,18 @@ export default function CommercialClient() {
     setDossLoad(false)
   }
 
-  async function updateDossier(recordId: string, pct_reussite?: string, mois_signature?: string) {
-    await fetch('/api/dossiers-soumis', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ recordId, pct_reussite, mois_signature }) })
-    setDossiers(prev => prev.map(d => d.id === recordId ? { ...d, ...(pct_reussite !== undefined ? { pct_reussite } : {}), ...(mois_signature !== undefined ? { mois_signature } : {}) } : d))
+  async function updateDossier(recordId: string, pct_reussite?: string, mois_signature?: string, statut_abonne?: string) {
+    await fetch('/api/dossiers-soumis', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ recordId, pct_reussite, mois_signature, statut_abonne }) })
+    // Si statut mis à Annulé/Refusé/Repris → retirer de la liste car ne correspond plus au filtre
+    if (statut_abonne !== undefined && statut_abonne !== '') {
+      setDossiers(prev => prev.filter(d => d.id !== recordId))
+    } else {
+      setDossiers(prev => prev.map(d => d.id === recordId ? {
+        ...d,
+        ...(pct_reussite   !== undefined ? { pct_reussite }   : {}),
+        ...(mois_signature !== undefined ? { mois_signature }  : {}),
+      } : d))
+    }
   }
 
   useEffect(() => { load('', '') }, [])
