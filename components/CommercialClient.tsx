@@ -17,7 +17,7 @@ interface ApiData {
   meta: { total_signes: number; total_annules: number; taux_annulation_global: number; total_commerciaux: number; total_installateurs: number }
 }
 type Objectifs = Record<string, Record<string, Record<string, number>>>
-interface DossierSoumis { id: string; nom: string; entreprise: string; segment: string; commercial: string; date_creation: string; date_edition: string; capex: number; kwc: number; installateur: string; pct_reussite: string; mois_signature: string }
+interface DossierSoumis { id: string; nom: string; entreprise: string; segment: string; commercial: string; date_creation: string; capex: number; kwc: number; installateur: string; pct_reussite: string; mois_signature: string }
 type SortDir = 'asc' | 'desc'
 type ViewType = 'leaderboard' | 'pipeline' | 'heatmap' | 'installateurs' | 'objectifs' | 'dossiers'
 
@@ -140,14 +140,12 @@ const MOIS_LABELS: Record<string, string> = {
   '01':'Jan','02':'Fév','03':'Mar','04':'Avr','05':'Mai','06':'Juin',
   '07':'Juil','08':'Aoû','09':'Sep','10':'Oct','11':'Nov','12':'Déc'
 }
-
 function ObjectifsView({ data, objectifs, anneeFilter }: { data: ApiData; objectifs: Objectifs; anneeFilter: string }) {
   const annee = anneeFilter || new Date().getFullYear().toString()
   const objAnnee = objectifs[annee] || {}
   const currentMonth = new Date().toISOString().slice(0, 7)
   const currentMM = currentMonth.slice(5, 7)
   const mois = ['01','02','03','04','05','06','07','08','09','10','11','12']
-
   const rows = data.par_commercial.filter(c => c.nom !== 'Non assigné').map(com => {
     const objKey = Object.keys(objAnnee).find(k => matchNom(com.nom, k))
     const objMois = objKey ? objAnnee[objKey] : null
@@ -164,7 +162,6 @@ function ObjectifsView({ data, objectifs, anneeFilter }: { data: ApiData; object
     const totalPct      = totalObjectif && totalObjectif > 0 ? Math.round(totalRealise / totalObjectif * 100) : null
     return { com, moisData, totalRealise, totalObjectif, totalPct }
   })
-
   const colTotaux = mois.map(mm => {
     const monthStr  = `${annee}-${mm}`
     const realTotal = data.par_commercial.reduce((s, c) => s + (c.monthly.find(r => r.month === monthStr)?.capex || 0), 0)
@@ -175,28 +172,13 @@ function ObjectifsView({ data, objectifs, anneeFilter }: { data: ApiData; object
   const grandRealTotal = colTotaux.reduce((s, c) => s + c.realTotal, 0)
   const grandObjTotal  = colTotaux.reduce((s, c) => s + c.objTotal, 0)
   const grandPct       = grandObjTotal > 0 ? Math.round(grandRealTotal / grandObjTotal * 100) : null
-
-  const pctColor = (pct: number | null) => {
-    if (pct === null) return 'text-gray-400'
-    if (pct >= 100) return 'text-emerald-600'
-    if (pct >= 70)  return 'text-orange-500'
-    return 'text-red-500'
-  }
-  const pctBg = (pct: number | null, isPast: boolean) => {
-    if (!isPast || pct === null) return ''
-    if (pct >= 100) return 'bg-emerald-50'
-    if (pct >= 70)  return 'bg-orange-50'
-    return 'bg-red-50'
-  }
-
+  const pctColor = (pct: number | null) => { if (pct === null) return 'text-gray-400'; if (pct >= 100) return 'text-emerald-600'; if (pct >= 70) return 'text-orange-500'; return 'text-red-500' }
+  const pctBg = (pct: number | null, isPast: boolean) => { if (!isPast || pct === null) return ''; if (pct >= 100) return 'bg-emerald-50'; if (pct >= 70) return 'bg-orange-50'; return 'bg-red-50' }
   return (
     <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
       <div className="px-5 py-4 border-b border-gray-100">
         <div className="flex items-center justify-between">
-          <div>
-            <h2 className="font-semibold text-gray-900">🎯 Suivi des objectifs CAPEX {annee}</h2>
-            <p className="text-xs text-gray-400 mt-0.5">Réalisé vs objectif mensuel · Objectifs modifiables dans <code className="bg-gray-100 px-1 rounded">data/objectifs.json</code></p>
-          </div>
+          <div><h2 className="font-semibold text-gray-900">🎯 Suivi des objectifs CAPEX {annee}</h2><p className="text-xs text-gray-400 mt-0.5">Réalisé vs objectif mensuel · Modifiables dans <code className="bg-gray-100 px-1 rounded">data/objectifs.json</code></p></div>
           <div className="flex items-center gap-2 text-xs text-gray-500">
             <span className="flex items-center gap-1"><span className="w-3 h-3 rounded bg-emerald-100 inline-block" /> ≥100%</span>
             <span className="flex items-center gap-1"><span className="w-3 h-3 rounded bg-orange-100 inline-block" /> 70-99%</span>
@@ -209,52 +191,25 @@ function ObjectifsView({ data, objectifs, anneeFilter }: { data: ApiData; object
           <thead className="bg-gray-50 border-b border-gray-200">
             <tr>
               <th className="px-3 py-3 text-left font-semibold text-gray-600 sticky left-0 bg-gray-50 z-10" style={{ minWidth: 160 }}>Commercial</th>
-              {mois.map(mm => (
-                <th key={mm} className={`px-2 py-3 text-center font-semibold ${mm === currentMM ? 'text-blue-600 bg-blue-50' : 'text-gray-500'}`} style={{ minWidth: 80 }}>
-                  {MOIS_LABELS[mm]}{mm === currentMM && <span className="ml-1 text-blue-400">●</span>}
-                </th>
-              ))}
+              {mois.map(mm => (<th key={mm} className={`px-2 py-3 text-center font-semibold ${mm === currentMM ? 'text-blue-600 bg-blue-50' : 'text-gray-500'}`} style={{ minWidth: 80 }}>{MOIS_LABELS[mm]}{mm === currentMM && <span className="ml-1 text-blue-400">●</span>}</th>))}
               <th className="px-3 py-3 text-center font-semibold text-gray-700 bg-gray-100" style={{ minWidth: 110 }}>Total annuel</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-100">
             {rows.map(({ com, moisData, totalRealise, totalObjectif, totalPct }) => (
               <tr key={com.nom} className="hover:bg-gray-50 transition-colors">
-                <td className="px-3 py-2.5 sticky left-0 bg-white z-10 border-r border-gray-100">
-                  <div className="flex items-center gap-2">
-                    <Avatar nom={com.nom} size={6} />
-                    <span className="font-medium text-gray-800 truncate" style={{ maxWidth: 120 }}>{com.nom}</span>
-                  </div>
-                </td>
+                <td className="px-3 py-2.5 sticky left-0 bg-white z-10 border-r border-gray-100"><div className="flex items-center gap-2"><Avatar nom={com.nom} size={6} /><span className="font-medium text-gray-800 truncate" style={{ maxWidth: 120 }}>{com.nom}</span></div></td>
                 {moisData.map(({ mm, realise, objectif, pct, isPast }) => (
                   <td key={mm} className={`px-2 py-2 text-center ${pctBg(pct, isPast)} ${mm === currentMM ? 'ring-1 ring-inset ring-blue-200' : ''}`}>
                     {objectif !== null && objectif > 0 ? (
-                      <div>
-                        <div className={`font-bold ${pctColor(pct)}`}>{pct !== null ? `${pct}%` : '—'}</div>
-                        <div className="text-gray-600 mt-0.5">{fmtK(realise)}</div>
-                        <div className="text-gray-400">{fmtK(objectif)}</div>
-                        {isPast && pct !== null && (
-                          <div className="mt-1 h-0.5 bg-gray-200 rounded-full">
-                            <div className={`h-0.5 rounded-full ${pct >= 100 ? 'bg-emerald-500' : pct >= 70 ? 'bg-orange-400' : 'bg-red-400'}`} style={{ width: `${Math.min(pct, 100)}%` }} />
-                          </div>
-                        )}
+                      <div><div className={`font-bold ${pctColor(pct)}`}>{pct !== null ? `${pct}%` : '—'}</div><div className="text-gray-600 mt-0.5">{fmtK(realise)}</div><div className="text-gray-400">{fmtK(objectif)}</div>
+                        {isPast && pct !== null && (<div className="mt-1 h-0.5 bg-gray-200 rounded-full"><div className={`h-0.5 rounded-full ${pct >= 100 ? 'bg-emerald-500' : pct >= 70 ? 'bg-orange-400' : 'bg-red-400'}`} style={{ width: `${Math.min(pct, 100)}%` }} /></div>)}
                       </div>
-                    ) : (
-                      <div>
-                        {realise > 0 ? <div className="text-gray-600 font-medium">{fmtK(realise)}</div> : <span className="text-gray-300">—</span>}
-                        <div className="text-gray-300 text-xs">pas d'obj.</div>
-                      </div>
-                    )}
+                    ) : (<div>{realise > 0 ? <div className="text-gray-600 font-medium">{fmtK(realise)}</div> : <span className="text-gray-300">—</span>}<div className="text-gray-300 text-xs">pas d'obj.</div></div>)}
                   </td>
                 ))}
                 <td className="px-3 py-2.5 text-center bg-gray-50 font-semibold border-l border-gray-200">
-                  {totalObjectif !== null ? (
-                    <div>
-                      <div className={`text-sm font-bold ${pctColor(totalPct)}`}>{totalPct !== null ? `${totalPct}%` : '—'}</div>
-                      <div className="text-gray-700 text-xs">{fmtK(totalRealise)}</div>
-                      <div className="text-gray-400 text-xs">{fmtK(totalObjectif)}</div>
-                    </div>
-                  ) : <span className="text-gray-400 text-xs">{fmtK(totalRealise)}</span>}
+                  {totalObjectif !== null ? (<div><div className={`text-sm font-bold ${pctColor(totalPct)}`}>{totalPct !== null ? `${totalPct}%` : '—'}</div><div className="text-gray-700 text-xs">{fmtK(totalRealise)}</div><div className="text-gray-400 text-xs">{fmtK(totalObjectif)}</div></div>) : <span className="text-gray-400 text-xs">{fmtK(totalRealise)}</span>}
                 </td>
               </tr>
             ))}
@@ -288,8 +243,7 @@ const MOIS_OPTIONS = ['', 'Janvier', 'Février', 'Mars', 'Avril', 'Mai', 'Juin',
 
 function pctBadgeColor(pct: string) {
   if (pct === '100%') return 'text-emerald-600 bg-emerald-50'
-  if (pct === '75%')  return 'text-orange-500 bg-orange-50'
-  if (pct === '50%')  return 'text-orange-500 bg-orange-50'
+  if (pct === '75%' || pct === '50%') return 'text-orange-500 bg-orange-50'
   if (pct === '25%' || pct === '0%') return 'text-red-500 bg-red-50'
   return 'text-gray-400 bg-gray-50'
 }
@@ -300,13 +254,16 @@ function DossiersSoumisView({ dossiers, loading, onMount, onUpdate }: {
   onMount: () => void
   onUpdate: (id: string, pct?: string, mois?: string) => void
 }) {
-  const [mounted, setMounted]  = useState(false)
-  const [search, setSearch]    = useState('')
-  const [filterCom, setFilter] = useState('')
+  const [mounted, setMounted]     = useState(false)
+  const [search, setSearch]       = useState('')
+  const [filterCom, setFilter]    = useState('')
+  const [collapsed, setCollapsed] = useState<Record<string, boolean>>({})
 
   useEffect(() => {
     if (!mounted) { setMounted(true); onMount() }
   }, [mounted, onMount])
+
+  const toggle = (com: string) => setCollapsed(prev => ({ ...prev, [com]: !prev[com] }))
 
   const commerciaux = Array.from(new Set(dossiers.map(d => d.commercial))).sort()
 
@@ -321,53 +278,44 @@ function DossiersSoumisView({ dossiers, loading, onMount, onUpdate }: {
     .map(c => ({ commercial: c, items: filtered.filter(d => d.commercial === c) }))
     .filter(g => g.items.length > 0)
 
-  // ── Calcul des cards stats ──────────────────────────────────────────────────
-  const capexTotal    = dossiers.reduce((s, d) => s + d.capex, 0)
-  const sansPct       = dossiers.filter(d => !d.pct_reussite)
-  const capexSansPct  = sansPct.reduce((s, d) => s + d.capex, 0)
+  // Cards stats
+  const capexTotal   = dossiers.reduce((s, d) => s + d.capex, 0)
+  const sansPct      = dossiers.filter(d => !d.pct_reussite)
+  const capexSansPct = sansPct.reduce((s, d) => s + d.capex, 0)
   const statsPct = PCT_OPTIONS.filter(o => o !== '').map(pct => ({
     pct,
     items: dossiers.filter(d => d.pct_reussite === pct),
     capex: dossiers.filter(d => d.pct_reussite === pct).reduce((s, d) => s + d.capex, 0),
   }))
 
+  const allCollapsed = grouped.length > 0 && grouped.every(g => collapsed[g.commercial])
+
   return (
     <div className="space-y-4">
-      {/* ── Cards stats ── */}
+      {/* Cards stats */}
       {!loading && dossiers.length > 0 && (
         <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-8 gap-3">
-          {/* Card total */}
-          <div className="kpi-card col-span-2 md:col-span-2 border-l-4 border-l-gray-400">
+          <div className="kpi-card col-span-2 border-l-4 border-l-gray-400">
             <p className="kpi-label">CAPEX total soumis</p>
             <p className="kpi-value">{fmtK(capexTotal)}</p>
             <p className="kpi-sub">{dossiers.length} dossiers</p>
           </div>
-          {/* Card sans % */}
           <div className="kpi-card border-l-4 border-l-gray-300">
             <p className="kpi-label">Sans % renseigné</p>
             <p className="kpi-value text-gray-500">{fmtK(capexSansPct)}</p>
             <p className="kpi-sub">{sansPct.length} dossiers</p>
           </div>
-          {/* Cards par % */}
           {statsPct.map(({ pct, items, capex }) => (
-            <div key={pct} className={`kpi-card border-l-4 ${
-              pct === '100%' ? 'border-l-emerald-500' :
-              pct === '75%'  ? 'border-l-orange-400' :
-              pct === '50%'  ? 'border-l-orange-400' :
-              'border-l-red-400'
-            }`}>
+            <div key={pct} className={`kpi-card border-l-4 ${pct === '100%' ? 'border-l-emerald-500' : pct === '75%' || pct === '50%' ? 'border-l-orange-400' : 'border-l-red-400'}`}>
               <p className="kpi-label">{pct}</p>
-              <p className={`kpi-value ${
-                pct === '100%' ? 'text-emerald-600' :
-                pct === '75%' || pct === '50%' ? 'text-orange-500' :
-                'text-red-500'
-              }`}>{fmtK(capex)}</p>
+              <p className={`kpi-value ${pct === '100%' ? 'text-emerald-600' : pct === '75%' || pct === '50%' ? 'text-orange-500' : 'text-red-500'}`}>{fmtK(capex)}</p>
               <p className="kpi-sub">{items.length} dossier{items.length > 1 ? 's' : ''}</p>
             </div>
           ))}
         </div>
       )}
 
+      {/* Barre de filtres */}
       <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4">
         <div className="flex items-center gap-4 flex-wrap">
           <div className="flex-1">
@@ -382,6 +330,13 @@ function DossiersSoumisView({ dossiers, loading, onMount, onUpdate }: {
             <option value="">Tous les commerciaux</option>
             {commerciaux.map(c => <option key={c} value={c}>{c}</option>)}
           </select>
+          <button onClick={() => {
+            const next: Record<string, boolean> = {}
+            grouped.forEach(g => { next[g.commercial] = !allCollapsed })
+            setCollapsed(next)
+          }} className="text-sm px-3 py-1.5 border border-gray-200 rounded-lg hover:bg-gray-50 text-gray-600">
+            {allCollapsed ? '⊞ Tout déplier' : '⊟ Tout replier'}
+          </button>
           <button onClick={onMount} className="text-sm px-3 py-1.5 border border-gray-200 rounded-lg hover:bg-gray-50 text-gray-600">↺ Actualiser</button>
         </div>
       </div>
@@ -392,64 +347,75 @@ function DossiersSoumisView({ dossiers, loading, onMount, onUpdate }: {
         </div>
       )}
 
-      {!loading && grouped.map(({ commercial, items }) => (
-        <div key={commercial} className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
-          <div className="px-5 py-3 border-b border-gray-100 flex items-center gap-3">
-            <Avatar nom={commercial} size={8} />
-            <div>
-              <h3 className="font-semibold text-gray-900">{commercial}</h3>
-              <p className="text-xs text-gray-400">{items.length} dossier{items.length > 1 ? 's' : ''} soumis</p>
-            </div>
+      {!loading && grouped.map(({ commercial, items }) => {
+        const isCollapsed  = collapsed[commercial]
+        const capexGroupe  = items.reduce((s, d) => s + d.capex, 0)
+        return (
+          <div key={commercial} className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+            {/* Header cliquable */}
+            <button onClick={() => toggle(commercial)}
+              className="w-full px-5 py-3 border-b border-gray-100 flex items-center gap-3 hover:bg-gray-50 transition-colors text-left">
+              <Avatar nom={commercial} size={8} />
+              <div className="flex-1">
+                <h3 className="font-semibold text-gray-900">{commercial}</h3>
+                <p className="text-xs text-gray-400">{items.length} dossier{items.length > 1 ? 's' : ''} · {fmtK(capexGroupe)} CAPEX</p>
+              </div>
+              <span className="text-gray-400 text-lg">{isCollapsed ? '▶' : '▼'}</span>
+            </button>
+
+            {/* Tableau — masqué si replié */}
+            {!isCollapsed && (
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead className="bg-gray-50 border-b border-gray-100">
+                    <tr>
+                      <th className="px-3 py-2 text-left text-xs font-semibold text-gray-500">Abonné / Entreprise</th>
+                      <th className="px-3 py-2 text-left text-xs font-semibold text-gray-500">Segment</th>
+                      <th className="px-3 py-2 text-right text-xs font-semibold text-gray-500">CAPEX</th>
+                      <th className="px-3 py-2 text-right text-xs font-semibold text-gray-500">kWc</th>
+                      <th className="px-3 py-2 text-left text-xs font-semibold text-gray-500">Installateur</th>
+                      <th className="px-3 py-2 text-center text-xs font-semibold text-gray-500">Créé le</th>
+                      <th className="px-3 py-2 text-center text-xs font-semibold text-gray-500 bg-amber-50">% Réussite</th>
+                      <th className="px-3 py-2 text-center text-xs font-semibold text-gray-500 bg-blue-50">Mois signature</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-50">
+                    {items.map(d => (
+                      <tr key={d.id} className="hover:bg-gray-50 transition-colors">
+                        <td className="px-3 py-2.5">
+                          <p className="font-medium text-gray-800 text-sm truncate max-w-[180px]">{d.nom}</p>
+                          {d.entreprise && <p className="text-xs text-gray-400 truncate max-w-[180px]">{d.entreprise}</p>}
+                        </td>
+                        <td className="px-3 py-2.5">
+                          <span className={`text-xs px-1.5 py-0.5 rounded-full font-medium ${d.segment === 'Pro' ? 'bg-blue-100 text-blue-700' : 'bg-amber-100 text-amber-700'}`}>
+                            {d.segment || '—'}
+                          </span>
+                        </td>
+                        <td className="px-3 py-2.5 text-right font-medium text-gray-700 whitespace-nowrap text-xs">{fmtK(d.capex)}</td>
+                        <td className="px-3 py-2.5 text-right text-gray-600 text-xs">{d.kwc > 0 ? d.kwc.toFixed(1) : '—'}</td>
+                        <td className="px-3 py-2.5 text-xs text-gray-600 truncate max-w-[140px]">{d.installateur || '—'}</td>
+                        <td className="px-3 py-2.5 text-center text-xs text-gray-500">{fmtDate(d.date_creation)}</td>
+                        <td className="px-3 py-2.5 text-center bg-amber-50/50">
+                          <select value={d.pct_reussite} onChange={e => onUpdate(d.id, e.target.value, undefined)}
+                            className={`text-xs font-semibold px-2 py-1 rounded-lg border-0 cursor-pointer focus:ring-2 focus:ring-amber-300 ${pctBadgeColor(d.pct_reussite)}`}>
+                            {PCT_OPTIONS.map(o => <option key={o} value={o}>{o || '—'}</option>)}
+                          </select>
+                        </td>
+                        <td className="px-3 py-2.5 text-center bg-blue-50/50">
+                          <select value={d.mois_signature} onChange={e => onUpdate(d.id, undefined, e.target.value)}
+                            className="text-xs text-blue-700 bg-blue-50 px-2 py-1 rounded-lg border-0 cursor-pointer focus:ring-2 focus:ring-blue-300">
+                            {MOIS_OPTIONS.map(o => <option key={o} value={o}>{o || '—'}</option>)}
+                          </select>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
           </div>
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead className="bg-gray-50 border-b border-gray-100">
-                <tr>
-                  <th className="px-3 py-2 text-left text-xs font-semibold text-gray-500">Abonné / Entreprise</th>
-                  <th className="px-3 py-2 text-left text-xs font-semibold text-gray-500">Segment</th>
-                  <th className="px-3 py-2 text-right text-xs font-semibold text-gray-500">CAPEX</th>
-                  <th className="px-3 py-2 text-right text-xs font-semibold text-gray-500">kWc</th>
-                  <th className="px-3 py-2 text-left text-xs font-semibold text-gray-500">Installateur</th>
-                  <th className="px-3 py-2 text-center text-xs font-semibold text-gray-500">Créé le</th>
-                  <th className="px-3 py-2 text-center text-xs font-semibold text-gray-500 bg-amber-50">% Réussite</th>
-                  <th className="px-3 py-2 text-center text-xs font-semibold text-gray-500 bg-blue-50">Mois signature</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-50">
-                {items.map(d => (
-                  <tr key={d.id} className="hover:bg-gray-50 transition-colors">
-                    <td className="px-3 py-2.5">
-                      <p className="font-medium text-gray-800 text-sm truncate max-w-[180px]">{d.nom}</p>
-                      {d.entreprise && <p className="text-xs text-gray-400 truncate max-w-[180px]">{d.entreprise}</p>}
-                    </td>
-                    <td className="px-3 py-2.5">
-                      <span className={`text-xs px-1.5 py-0.5 rounded-full font-medium ${d.segment === 'Pro' ? 'bg-blue-100 text-blue-700' : 'bg-amber-100 text-amber-700'}`}>
-                        {d.segment || '—'}
-                      </span>
-                    </td>
-                    <td className="px-3 py-2.5 text-right font-medium text-gray-700 whitespace-nowrap text-xs">{fmtK(d.capex)}</td>
-                    <td className="px-3 py-2.5 text-right text-gray-600 text-xs">{d.kwc > 0 ? d.kwc.toFixed(1) : '—'}</td>
-                    <td className="px-3 py-2.5 text-xs text-gray-600 truncate max-w-[140px]">{d.installateur || '—'}</td>
-                    <td className="px-3 py-2.5 text-center text-xs text-gray-500">{fmtDate(d.date_creation)}</td>
-                    <td className="px-3 py-2.5 text-center bg-amber-50/50">
-                      <select value={d.pct_reussite} onChange={e => onUpdate(d.id, e.target.value, undefined)}
-                        className={`text-xs font-semibold px-2 py-1 rounded-lg border-0 cursor-pointer focus:ring-2 focus:ring-amber-300 ${pctBadgeColor(d.pct_reussite)}`}>
-                        {PCT_OPTIONS.map(o => <option key={o} value={o}>{o || '—'}</option>)}
-                      </select>
-                    </td>
-                    <td className="px-3 py-2.5 text-center bg-blue-50/50">
-                      <select value={d.mois_signature} onChange={e => onUpdate(d.id, undefined, e.target.value)}
-                        className="text-xs text-blue-700 bg-blue-50 px-2 py-1 rounded-lg border-0 cursor-pointer focus:ring-2 focus:ring-blue-300">
-                        {MOIS_OPTIONS.map(o => <option key={o} value={o}>{o || '—'}</option>)}
-                      </select>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      ))}
+        )
+      })}
 
       {!loading && grouped.length === 0 && (
         <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-12 text-center">
@@ -531,20 +497,13 @@ function ComPanel({ com, months, onClose }: { com: ComRow; months: string[]; onC
   const instSort  = useSort(instItems, 'signes')
   const [sel, setSel]           = useState<InstRow | null>(null)
   const [selMonth, setSelMonth] = useState<string | null>(null)
-
   const maxInst   = Math.max(...com.installateurs.map(i => i.signes), 1)
   const monthData = selMonth ? com.monthly.find(r => r.month === selMonth) : null
   const mLabel    = monthData?.label || selMonth?.slice(5) || ''
-
   const instForMonth = selMonth
-    ? com.installateurs.map(inst => {
-        const m = inst.monthly.find(r => r.month === selMonth)
-        return { ...inst, signes: m?.signes || 0, annules: m?.annules || 0, capex: m?.capex || 0, kwc: m?.kwc || 0, poses: m?.poses || 0 }
-      }).filter(i => i.signes + i.annules > 0).sort((a, b) => b.signes - a.signes)
+    ? com.installateurs.map(inst => { const m = inst.monthly.find(r => r.month === selMonth); return { ...inst, signes: m?.signes || 0, annules: m?.annules || 0, capex: m?.capex || 0, kwc: m?.kwc || 0, poses: m?.poses || 0 } }).filter(i => i.signes + i.annules > 0).sort((a, b) => b.signes - a.signes)
     : (instSort.sorted as unknown as InstRow[])
-
   const maxInstMonth = Math.max(...instForMonth.map(i => i.signes), 1)
-
   return (
     <div className="fixed inset-0 z-30 flex">
       <div className="flex-1 bg-black/20 backdrop-blur-sm" onClick={onClose} />
@@ -564,109 +523,54 @@ function ComPanel({ com, months, onClose }: { com: ComRow; months: string[]; onC
             <button onClick={onClose} className="text-white/60 hover:text-white text-2xl">✕</button>
           </div>
           <div className="grid grid-cols-5 gap-2">
-            {selMonth ? (
-              [{ label: `Signés ${mLabel}`, value: String(monthData?.signes || 0) }, { label: 'Annulés', value: String(monthData?.annules || 0) }, { label: 'CAPEX', value: fmtK(monthData?.capex || 0) }, { label: 'kWc', value: String(Math.round(monthData?.kwc || 0)) }, { label: 'Poses', value: String(monthData?.poses || 0) }].map(({ label, value }) => (
-                <div key={label} className="bg-white/10 rounded-lg p-2 text-center"><p className="text-white/60 text-xs">{label}</p><p className="text-white font-bold text-lg">{value}</p></div>
-              ))
-            ) : (
-              [{ label: 'Signés', value: String(com.signes) }, { label: 'CAPEX', value: fmtK(com.capex) }, { label: 'kWc', value: `${Math.round(com.kwc)}` }, { label: 'Taux pose', value: `${com.taux_pose}%` }, { label: 'Délai sig.', value: com.delai_moy_creation_signature > 0 ? `${com.delai_moy_creation_signature}j` : '—' }].map(({ label, value }) => (
-                <div key={label} className="bg-white/10 rounded-lg p-2 text-center"><p className="text-white/60 text-xs">{label}</p><p className="text-white font-bold">{value}</p></div>
-              ))
-            )}
+            {selMonth
+              ? [{ label: `Signés ${mLabel}`, value: String(monthData?.signes || 0) }, { label: 'Annulés', value: String(monthData?.annules || 0) }, { label: 'CAPEX', value: fmtK(monthData?.capex || 0) }, { label: 'kWc', value: String(Math.round(monthData?.kwc || 0)) }, { label: 'Poses', value: String(monthData?.poses || 0) }].map(({ label, value }) => (<div key={label} className="bg-white/10 rounded-lg p-2 text-center"><p className="text-white/60 text-xs">{label}</p><p className="text-white font-bold text-lg">{value}</p></div>))
+              : [{ label: 'Signés', value: String(com.signes) }, { label: 'CAPEX', value: fmtK(com.capex) }, { label: 'kWc', value: `${Math.round(com.kwc)}` }, { label: 'Taux pose', value: `${com.taux_pose}%` }, { label: 'Délai sig.', value: com.delai_moy_creation_signature > 0 ? `${com.delai_moy_creation_signature}j` : '—' }].map(({ label, value }) => (<div key={label} className="bg-white/10 rounded-lg p-2 text-center"><p className="text-white/60 text-xs">{label}</p><p className="text-white font-bold">{value}</p></div>))}
           </div>
         </div>
         <div className="flex-1 overflow-y-auto p-4 space-y-4">
-          {!selMonth && (
-            <div>
-              <h3 className="text-sm font-semibold text-gray-700 mb-2">Activité mensuelle</h3>
-              <BarChart data={com.monthly} months={months} />
-              <div className="flex gap-4 mt-1 text-xs text-gray-400">
-                <span className="flex items-center gap-1"><span className="w-2 h-2 bg-amber-400 rounded-sm inline-block" /> Signés</span>
-                <span className="flex items-center gap-1"><span className="w-2 h-2 bg-red-300 rounded-sm inline-block" /> Annulés</span>
-              </div>
-            </div>
-          )}
+          {!selMonth && (<div><h3 className="text-sm font-semibold text-gray-700 mb-2">Activité mensuelle</h3><BarChart data={com.monthly} months={months} /><div className="flex gap-4 mt-1 text-xs text-gray-400"><span className="flex items-center gap-1"><span className="w-2 h-2 bg-amber-400 rounded-sm inline-block" /> Signés</span><span className="flex items-center gap-1"><span className="w-2 h-2 bg-red-300 rounded-sm inline-block" /> Annulés</span></div></div>)}
           <div>
             <div className="flex items-center justify-between mb-2">
               <h3 className="text-sm font-semibold text-gray-700">Heatmap {selMonth && <span className="text-blue-600 ml-1">· {mLabel} sélectionné</span>}</h3>
               {selMonth && <button onClick={() => { setSelMonth(null); setSel(null) }} className="text-xs text-gray-400 hover:text-gray-700">Voir tout ×</button>}
             </div>
-            <div className="overflow-x-auto">
-              <div className="flex gap-1 min-w-max">
-                {months.map(m => {
-                  const d = com.monthly.find(r => r.month === m)
-                  const mx = Math.max(...com.monthly.map(r => r.signes), 1)
-                  return (
-                    <div key={m} className="flex flex-col items-center gap-1">
-                      <HeatCell v={d?.signes || 0} max={mx} selected={selMonth === m} onClick={() => { setSelMonth(selMonth === m ? null : m); setSel(null) }} />
-                      <span className={`whitespace-nowrap text-center ${selMonth === m ? 'text-blue-600 font-semibold' : 'text-gray-400'}`} style={{ fontSize: 9 }}>{d?.label || m.slice(5)}</span>
-                    </div>
-                  )
-                })}
-              </div>
-            </div>
+            <div className="overflow-x-auto"><div className="flex gap-1 min-w-max">{months.map(m => { const d = com.monthly.find(r => r.month === m); const mx = Math.max(...com.monthly.map(r => r.signes), 1); return (<div key={m} className="flex flex-col items-center gap-1"><HeatCell v={d?.signes || 0} max={mx} selected={selMonth === m} onClick={() => { setSelMonth(selMonth === m ? null : m); setSel(null) }} /><span className={`whitespace-nowrap text-center ${selMonth === m ? 'text-blue-600 font-semibold' : 'text-gray-400'}`} style={{ fontSize: 9 }}>{d?.label || m.slice(5)}</span></div>) })}</div></div>
           </div>
           <div>
-            <h3 className="text-sm font-semibold text-gray-700 mb-2">
-              {selMonth ? `Installateurs actifs en ${mLabel} (${instForMonth.length})` : `Ses installateurs (${com.installateurs.length})`}
-            </h3>
+            <h3 className="text-sm font-semibold text-gray-700 mb-2">{selMonth ? `Installateurs actifs en ${mLabel} (${instForMonth.length})` : `Ses installateurs (${com.installateurs.length})`}</h3>
             {sel ? (
               <div className="border border-blue-200 rounded-xl overflow-hidden">
                 <div className="bg-blue-50 p-3 flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <button onClick={() => setSel(null)} className="text-blue-600 hover:text-blue-800 text-sm">← Retour</button>
-                    <span className="font-semibold text-gray-800 text-sm truncate max-w-xs">{sel.nom}</span>
-                  </div>
-                  <div className="flex gap-3 text-sm">
-                    <span><span className="font-bold text-amber-600">{selMonth ? (sel.monthly.find(r => r.month === selMonth)?.signes || 0) : sel.signes}</span> signés</span>
-                    <span className="text-gray-500">{fmtK(selMonth ? (sel.monthly.find(r => r.month === selMonth)?.capex || 0) : sel.capex)}</span>
-                  </div>
+                  <div className="flex items-center gap-2"><button onClick={() => setSel(null)} className="text-blue-600 hover:text-blue-800 text-sm">← Retour</button><span className="font-semibold text-gray-800 text-sm truncate max-w-xs">{sel.nom}</span></div>
+                  <div className="flex gap-3 text-sm"><span><span className="font-bold text-amber-600">{selMonth ? (sel.monthly.find(r => r.month === selMonth)?.signes || 0) : sel.signes}</span> signés</span><span className="text-gray-500">{fmtK(selMonth ? (sel.monthly.find(r => r.month === selMonth)?.capex || 0) : sel.capex)}</span></div>
                 </div>
-                <div className="p-3">
-                  {selMonth ? (
-                    <div className="text-center py-6 text-gray-400 text-sm">
-                      <p className="text-3xl font-bold text-gray-700 mb-1">{sel.monthly.find(r => r.month === selMonth)?.signes || 0}</p>
-                      <p>contrats signés en {mLabel}</p>
-                      <p className="text-xs mt-1">{fmtK(sel.monthly.find(r => r.month === selMonth)?.capex || 0)} CAPEX · {(sel.monthly.find(r => r.month === selMonth)?.kwc || 0).toFixed(1)} kWc</p>
-                    </div>
-                  ) : <BarChart data={sel.monthly} months={months} />}
-                </div>
+                <div className="p-3">{selMonth ? (<div className="text-center py-6 text-gray-400 text-sm"><p className="text-3xl font-bold text-gray-700 mb-1">{sel.monthly.find(r => r.month === selMonth)?.signes || 0}</p><p>contrats signés en {mLabel}</p><p className="text-xs mt-1">{fmtK(sel.monthly.find(r => r.month === selMonth)?.capex || 0)} CAPEX · {(sel.monthly.find(r => r.month === selMonth)?.kwc || 0).toFixed(1)} kWc</p></div>) : <BarChart data={sel.monthly} months={months} />}</div>
               </div>
             ) : (
               <div className="overflow-x-auto">
                 <table className="w-full text-sm border-collapse">
-                  <thead>
-                    <tr className="border-b border-gray-200 bg-gray-50">
-                      <th className="px-3 py-2 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">Installateur</th>
-                      <Th label="Signés"    k="signes"   col={instSort.col} dir={instSort.dir} onSort={instSort.toggle} />
-                      <Th label="Annulés"   k="annules"  col={instSort.col} dir={instSort.dir} onSort={instSort.toggle} />
-                      <Th label="CAPEX"     k="capex"    col={instSort.col} dir={instSort.dir} onSort={instSort.toggle} />
-                      <Th label="kWc"       k="kwc"      col={instSort.col} dir={instSort.dir} onSort={instSort.toggle} />
-                      <Th label="Poses"     k="poses"    col={instSort.col} dir={instSort.dir} onSort={instSort.toggle} />
-                      {!selMonth && <>
-                        <Th label="Taux pose" k="taux_pose" col={instSort.col} dir={instSort.dir} onSort={instSort.toggle} />
-                        <Th label="Délai sig." k="delai_moy_creation_signature" col={instSort.col} dir={instSort.dir} onSort={instSort.toggle} />
-                      </>}
-                    </tr>
-                  </thead>
+                  <thead><tr className="border-b border-gray-200 bg-gray-50">
+                    <th className="px-3 py-2 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">Installateur</th>
+                    <Th label="Signés" k="signes" col={instSort.col} dir={instSort.dir} onSort={instSort.toggle} />
+                    <Th label="Annulés" k="annules" col={instSort.col} dir={instSort.dir} onSort={instSort.toggle} />
+                    <Th label="CAPEX" k="capex" col={instSort.col} dir={instSort.dir} onSort={instSort.toggle} />
+                    <Th label="kWc" k="kwc" col={instSort.col} dir={instSort.dir} onSort={instSort.toggle} />
+                    <Th label="Poses" k="poses" col={instSort.col} dir={instSort.dir} onSort={instSort.toggle} />
+                    {!selMonth && <><Th label="Taux pose" k="taux_pose" col={instSort.col} dir={instSort.dir} onSort={instSort.toggle} /><Th label="Délai sig." k="delai_moy_creation_signature" col={instSort.col} dir={instSort.dir} onSort={instSort.toggle} /></>}
+                  </tr></thead>
                   <tbody className="divide-y divide-gray-100">
                     {instForMonth.map((inst, i) => {
                       const max = selMonth ? maxInstMonth : maxInst
                       return (
                         <tr key={i} onClick={() => setSel(com.installateurs.find(ci => ci.nom === inst.nom) || null)} className="hover:bg-blue-50 cursor-pointer transition-colors align-middle">
-                          <td className="px-3 py-2.5" style={{ maxWidth: 180 }}>
-                            <p className="text-sm font-medium text-gray-800 truncate">{inst.nom}</p>
-                            <MiniBar v={inst.signes} max={max} />
-                          </td>
+                          <td className="px-3 py-2.5" style={{ maxWidth: 180 }}><p className="text-sm font-medium text-gray-800 truncate">{inst.nom}</p><MiniBar v={inst.signes} max={max} /></td>
                           <td className="px-3 py-2.5 text-center font-semibold text-gray-800">{inst.signes}</td>
                           <td className="px-3 py-2.5 text-center"><span className={inst.annules > 0 ? 'text-red-500 font-medium' : 'text-gray-300'}>{inst.annules || '—'}</span></td>
                           <td className="px-3 py-2.5 text-right text-xs font-medium text-gray-700 whitespace-nowrap">{fmtK(inst.capex)}</td>
                           <td className="px-3 py-2.5 text-right text-gray-600">{inst.kwc.toFixed(1)}</td>
                           <td className="px-3 py-2.5 text-center text-gray-700">{inst.poses}</td>
-                          {!selMonth && <>
-                            <td className="px-3 py-2.5 text-center"><TauxPose v={inst.taux_pose} /></td>
-                            <td className="px-3 py-2.5 text-center text-gray-500 text-xs">{inst.delai_moy_creation_signature > 0 ? `${inst.delai_moy_creation_signature}j` : '—'}</td>
-                          </>}
+                          {!selMonth && <><td className="px-3 py-2.5 text-center"><TauxPose v={inst.taux_pose} /></td><td className="px-3 py-2.5 text-center text-gray-500 text-xs">{inst.delai_moy_creation_signature > 0 ? `${inst.delai_moy_creation_signature}j` : '—'}</td></>}
                         </tr>
                       )
                     })}
@@ -684,18 +588,18 @@ function ComPanel({ com, months, onClose }: { com: ComRow; months: string[]; onC
 
 // ─── Dashboard principal ──────────────────────────────────────────────────────
 export default function CommercialClient() {
-  const [data, setData]           = useState<ApiData | null>(null)
-  const [loading, setLoading]     = useState(true)
-  const [error, setError]         = useState<string | null>(null)
-  const [annee, setAnnee]         = useState('')
-  const [mois, setMois]           = useState('')
-  const [view, setView]           = useState<ViewType>('leaderboard')
-  const [selCom, setSelCom]       = useState<ComRow | null>(null)
-  const [selPipe, setSelPipe]     = useState<PipelineRow | null>(null)
-  const [search, setSearch]       = useState('')
-  const [role, setRole]           = useState('')
-  const [objectifs, setObjectifs] = useState<Objectifs>({})
-  const [dossiers, setDossiers]   = useState<DossierSoumis[]>([])
+  const [data, setData]            = useState<ApiData | null>(null)
+  const [loading, setLoading]      = useState(true)
+  const [error, setError]          = useState<string | null>(null)
+  const [annee, setAnnee]          = useState('')
+  const [mois, setMois]            = useState('')
+  const [view, setView]            = useState<ViewType>('leaderboard')
+  const [selCom, setSelCom]        = useState<ComRow | null>(null)
+  const [selPipe, setSelPipe]      = useState<PipelineRow | null>(null)
+  const [search, setSearch]        = useState('')
+  const [role, setRole]            = useState('')
+  const [objectifs, setObjectifs]  = useState<Objectifs>({})
+  const [dossiers, setDossiers]    = useState<DossierSoumis[]>([])
   const [dossLoading, setDossLoad] = useState(false)
 
   useEffect(() => {
@@ -703,10 +607,7 @@ export default function CommercialClient() {
     fetch('/api/objectifs').then(r => r.json()).then(j => setObjectifs(j.objectifs || {})).catch(() => {})
   }, [])
 
-  async function logout() {
-    await fetch('/api/auth', { method: 'DELETE' })
-    window.location.href = '/login'
-  }
+  async function logout() { await fetch('/api/auth', { method: 'DELETE' }); window.location.href = '/login' }
 
   async function load(yr: string, mo: string) {
     setLoading(true); setError(null)
@@ -723,25 +624,13 @@ export default function CommercialClient() {
 
   async function loadDossiers() {
     setDossLoad(true)
-    try {
-      const res  = await fetch('/api/dossiers-soumis')
-      const json = await res.json()
-      setDossiers(json.dossiers || [])
-    } catch { /**/ }
+    try { const res = await fetch('/api/dossiers-soumis'); const json = await res.json(); setDossiers(json.dossiers || []) } catch { /**/ }
     setDossLoad(false)
   }
 
   async function updateDossier(recordId: string, pct_reussite?: string, mois_signature?: string) {
-    await fetch('/api/dossiers-soumis', {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ recordId, pct_reussite, mois_signature }),
-    })
-    setDossiers(prev => prev.map(d => d.id === recordId ? {
-      ...d,
-      ...(pct_reussite   !== undefined ? { pct_reussite }   : {}),
-      ...(mois_signature !== undefined ? { mois_signature }  : {}),
-    } : d))
+    await fetch('/api/dossiers-soumis', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ recordId, pct_reussite, mois_signature }) })
+    setDossiers(prev => prev.map(d => d.id === recordId ? { ...d, ...(pct_reussite !== undefined ? { pct_reussite } : {}), ...(mois_signature !== undefined ? { mois_signature } : {}) } : d))
   }
 
   useEffect(() => { load('', '') }, [])
@@ -754,7 +643,7 @@ export default function CommercialClient() {
   const instSort = useSort(instItems, 'signes')
   const pipeSort = useSort(pipeItems, 'en_cours_pipe')
 
-  const maxCom  = useMemo(() => Math.max(...(data?.par_commercial.map(c => c.capex)  || [1]), 1), [data])
+  const maxCom  = useMemo(() => Math.max(...(data?.par_commercial.map(c => c.capex) || [1]), 1), [data])
   const maxInst = useMemo(() => Math.max(...(data?.par_installateur.map(i => i.signes) || [1]), 1), [data])
   const maxPipe = useMemo(() => Math.max(...(data?.pipeline_par_commercial.map(p => p.en_cours_pipe) || [1]), 1), [data])
   const heatMax = useMemo(() => data ? Math.max(...data.par_commercial.flatMap(c => c.monthly.map(m => m.signes)), 1) : 1, [data])
@@ -774,11 +663,11 @@ export default function CommercialClient() {
   const top3 = [...(data?.par_commercial.filter(c => c.nom !== 'Non assigné') || [])].sort((a, b) => b.capex - a.capex).slice(0, 3)
 
   const views: { id: ViewType; label: string }[] = [
-    { id: 'leaderboard',   label: '🏆 Leaderboard'   },
-    { id: 'pipeline',      label: '🔄 Pipeline 30j'   },
-    { id: 'heatmap',       label: '🗓️ Heatmap'        },
-    { id: 'installateurs', label: '🏗️ Installateurs'  },
-    { id: 'dossiers',      label: '📋 Dossiers soumis' },
+    { id: 'leaderboard',   label: '🏆 Leaderboard'    },
+    { id: 'pipeline',      label: '🔄 Pipeline 30j'    },
+    { id: 'heatmap',       label: '🗓️ Heatmap'         },
+    { id: 'installateurs', label: '🏗️ Installateurs'   },
+    { id: 'dossiers',      label: '📋 Dossiers soumis'  },
     ...(role === 'admin' ? [{ id: 'objectifs' as ViewType, label: '🎯 Objectifs' }] : []),
   ]
 
@@ -799,9 +688,7 @@ export default function CommercialClient() {
             {allMonths.map(m => <option key={m.v} value={m.v}>{m.l}</option>)}
           </select>
           <div className="flex bg-gray-100 rounded-lg p-1 gap-1 flex-wrap">
-            {views.map(v => (
-              <button key={v.id} onClick={() => setView(v.id)} className={`px-3 py-1 text-sm rounded-md transition-all ${view === v.id ? 'bg-white shadow-sm text-gray-900 font-medium' : 'text-gray-500 hover:text-gray-700'}`}>{v.label}</button>
-            ))}
+            {views.map(v => (<button key={v.id} onClick={() => setView(v.id)} className={`px-3 py-1 text-sm rounded-md transition-all ${view === v.id ? 'bg-white shadow-sm text-gray-900 font-medium' : 'text-gray-500 hover:text-gray-700'}`}>{v.label}</button>))}
           </div>
           <div className="flex-1" />
           {role === 'admin' && <a href="/dashboard" className="text-sm px-3 py-1.5 border border-gray-200 rounded-lg hover:bg-gray-50 text-gray-600">← Production</a>}
@@ -813,13 +700,13 @@ export default function CommercialClient() {
       {selPipe && data && <PipelinePanel pipe={selPipe} onClose={() => setSelPipe(null)} />}
 
       <main className="max-w-screen-2xl mx-auto px-4 py-5 space-y-4">
-        {loading && <div className="flex items-center justify-center py-32"><div className="text-center"><div className="w-10 h-10 border-2 border-blue-600 border-t-transparent rounded-full animate-spin mx-auto mb-3" /><p className="text-sm text-gray-500">Chargement…</p></div></div>}
-        {error && <div className="bg-red-50 border border-red-200 rounded-xl p-5"><p className="font-semibold text-red-700">{error}</p></div>}
-
-        {/* Vue Dossiers : pas besoin des données principales */}
+        {/* Vue Dossiers : indépendante du chargement principal */}
         {view === 'dossiers' && (
           <DossiersSoumisView dossiers={dossiers} loading={dossLoading} onMount={loadDossiers} onUpdate={updateDossier} />
         )}
+
+        {loading && view !== 'dossiers' && <div className="flex items-center justify-center py-32"><div className="text-center"><div className="w-10 h-10 border-2 border-blue-600 border-t-transparent rounded-full animate-spin mx-auto mb-3" /><p className="text-sm text-gray-500">Chargement…</p></div></div>}
+        {error   && view !== 'dossiers' && <div className="bg-red-50 border border-red-200 rounded-xl p-5"><p className="font-semibold text-red-700">{error}</p></div>}
 
         {!loading && !error && data && view !== 'dossiers' && (
           <>
@@ -877,18 +764,8 @@ export default function CommercialClient() {
                         {(comSort.sorted as unknown as ComRow[]).map((com, i) => (
                           <tr key={com.nom} onClick={() => setSelCom(com)} className="hover:bg-blue-50 cursor-pointer transition-colors">
                             <td className="px-4 py-3"><Medal rank={i + 1} /></td>
-                            <td className="px-4 py-3">
-                              <div className="flex items-center gap-2.5">
-                                <Avatar nom={com.nom} size={8} />
-                                <div><p className="font-medium text-gray-900 text-sm">{com.nom}</p><p className="text-xs text-gray-400">{com.abo_moyen > 0 ? `Abo. moy. ${fmtFull(com.abo_moyen)}` : '—'}</p></div>
-                              </div>
-                            </td>
-                            <td className="px-4 py-3">
-                              <div className="flex-1 h-1.5 bg-gray-100 rounded-full" style={{ minWidth: 60 }}>
-                                <div className={`h-1.5 rounded-full ${i < 3 ? 'bg-amber-400' : 'bg-blue-400'}`} style={{ width: `${Math.min(Math.round(com.capex / maxCom * 100), 100)}%` }} />
-                              </div>
-                              <p className="text-sm font-semibold text-gray-800 mt-0.5">{fmtK(com.capex)}</p>
-                            </td>
+                            <td className="px-4 py-3"><div className="flex items-center gap-2.5"><Avatar nom={com.nom} size={8} /><div><p className="font-medium text-gray-900 text-sm">{com.nom}</p><p className="text-xs text-gray-400">{com.abo_moyen > 0 ? `Abo. moy. ${fmtFull(com.abo_moyen)}` : '—'}</p></div></div></td>
+                            <td className="px-4 py-3"><div className="flex-1 h-1.5 bg-gray-100 rounded-full" style={{ minWidth: 60 }}><div className={`h-1.5 rounded-full ${i < 3 ? 'bg-amber-400' : 'bg-blue-400'}`} style={{ width: `${Math.min(Math.round(com.capex / maxCom * 100), 100)}%` }} /></div><p className="text-sm font-semibold text-gray-800 mt-0.5">{fmtK(com.capex)}</p></td>
                             <td className="px-4 py-3 text-center"><Trend v={com.tendance_signes} /></td>
                             <td className="px-4 py-3 text-gray-700 text-sm">{com.signes} <span className="text-xs text-gray-400">contrats</span></td>
                             <td className="px-4 py-3 text-center">{com.annules > 0 ? <span className="text-red-500 font-medium text-sm">{com.annules} <span className="text-red-400 text-xs">({com.taux_annulation}%)</span></span> : <span className="text-gray-300 text-sm">—</span>}</td>
@@ -916,17 +793,12 @@ export default function CommercialClient() {
                     { label: 'kWc à signer',           value: `${Math.round(data.pipeline_global.kwc_en_cours)} kWc`, sub: `${Math.round(data.pipeline_global.kwc_signe)} kWc signés`, accent: false },
                   ].map(({ label, value, sub, accent }) => (
                     <div key={label} className={`kpi-card ${accent ? 'border-l-4 border-l-orange-400' : 'border-l-4 border-l-indigo-400'}`}>
-                      <p className="kpi-label">{label}</p>
-                      <p className={`kpi-value ${accent ? 'text-orange-600' : ''}`}>{value}</p>
-                      {sub && <p className="kpi-sub">{sub}</p>}
+                      <p className="kpi-label">{label}</p><p className={`kpi-value ${accent ? 'text-orange-600' : ''}`}>{value}</p>{sub && <p className="kpi-sub">{sub}</p>}
                     </div>
                   ))}
                 </div>
                 <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
-                  <div className="px-5 py-4 border-b border-gray-100">
-                    <h2 className="font-semibold text-gray-900">Pipeline 30 jours par commercial</h2>
-                    <p className="text-xs text-gray-400 mt-0.5">Dossiers édités dans les 30 derniers jours · Cliquez pour voir les dossiers</p>
-                  </div>
+                  <div className="px-5 py-4 border-b border-gray-100"><h2 className="font-semibold text-gray-900">Pipeline 30 jours par commercial</h2><p className="text-xs text-gray-400 mt-0.5">Dossiers édités dans les 30 derniers jours · Cliquez pour voir les dossiers</p></div>
                   <div className="overflow-x-auto">
                     <table className="w-full text-sm">
                       <thead className="bg-gray-50 border-b border-gray-100">
@@ -949,10 +821,7 @@ export default function CommercialClient() {
                             <td className="px-4 py-3 text-gray-400 text-xs">{i + 1}</td>
                             <td className="px-4 py-3"><div className="flex items-center gap-2"><Avatar nom={pipe.nom} size={8} /><span className="font-medium text-gray-900 text-sm">{pipe.nom}</span></div></td>
                             <td className="px-4 py-3"><PctBarCount v={pipe.en_cours_pipe} max={maxPipe} color="bg-orange-400" /></td>
-                            <td className="px-4 py-3" style={{ minWidth: 120 }}>
-                              <div className="h-2 bg-gray-100 rounded-full"><div className="h-2 bg-indigo-500 rounded-full" style={{ width: `${pipe.total_pipe ? Math.round(pipe.signes_pipe / pipe.total_pipe * 100) : 0}%` }} /></div>
-                              <p className="text-xs text-gray-400 mt-0.5">{pipe.signes_pipe}/{pipe.total_pipe} signés</p>
-                            </td>
+                            <td className="px-4 py-3" style={{ minWidth: 120 }}><div className="h-2 bg-gray-100 rounded-full"><div className="h-2 bg-indigo-500 rounded-full" style={{ width: `${pipe.total_pipe ? Math.round(pipe.signes_pipe / pipe.total_pipe * 100) : 0}%` }} /></div><p className="text-xs text-gray-400 mt-0.5">{pipe.signes_pipe}/{pipe.total_pipe} signés</p></td>
                             <td className="px-4 py-3 font-bold text-orange-600 whitespace-nowrap">{fmtK(pipe.capex_en_cours)}</td>
                             <td className="px-4 py-3 font-medium text-emerald-600">{pipe.signes_pipe}</td>
                             <td className="px-4 py-3"><span className={`font-semibold text-sm ${pipe.taux_conversion >= 70 ? 'text-emerald-600' : pipe.taux_conversion >= 40 ? 'text-amber-600' : 'text-gray-400'}`}>{pipe.taux_conversion}%</span></td>
@@ -972,42 +841,31 @@ export default function CommercialClient() {
             {/* ── HEATMAP ── */}
             {view === 'heatmap' && (
               <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
-                <div className="px-5 py-4 border-b border-gray-100">
-                  <h2 className="font-semibold text-gray-900">Heatmap — Contrats signés par commercial et par mois</h2>
-                </div>
+                <div className="px-5 py-4 border-b border-gray-100"><h2 className="font-semibold text-gray-900">Heatmap — Contrats signés par commercial et par mois</h2></div>
                 <div className="p-4 overflow-x-auto">
                   <table className="w-full text-sm">
-                    <thead>
-                      <tr>
-                        <th className="text-left text-xs font-semibold text-gray-400 pr-4 pb-2 min-w-[140px]">Commercial</th>
-                        {data.months.map((m, i) => <th key={m} className="text-center text-xs text-gray-400 font-medium pb-2 px-0.5 whitespace-nowrap">{data.month_labels[i]}</th>)}
-                        <th className="text-right text-xs font-semibold text-gray-400 pl-4 pb-2">Total</th>
-                        <th className="text-right text-xs font-semibold text-gray-400 pl-3 pb-2">Délai moy.</th>
-                      </tr>
-                    </thead>
+                    <thead><tr>
+                      <th className="text-left text-xs font-semibold text-gray-400 pr-4 pb-2 min-w-[140px]">Commercial</th>
+                      {data.months.map((m, i) => <th key={m} className="text-center text-xs text-gray-400 font-medium pb-2 px-0.5 whitespace-nowrap">{data.month_labels[i]}</th>)}
+                      <th className="text-right text-xs font-semibold text-gray-400 pl-4 pb-2">Total</th>
+                      <th className="text-right text-xs font-semibold text-gray-400 pl-3 pb-2">Délai moy.</th>
+                    </tr></thead>
                     <tbody className="divide-y divide-gray-50">
                       {data.par_commercial.map(com => (
                         <tr key={com.nom} className="hover:bg-gray-50">
-                          <td className="pr-4 py-1.5">
-                            <div className="flex items-center gap-2 cursor-pointer" onClick={() => setSelCom(com)}>
-                              <Avatar nom={com.nom} size={6} />
-                              <span className="text-sm font-medium text-gray-700 truncate max-w-[100px]">{com.nom}</span>
-                            </div>
-                          </td>
+                          <td className="pr-4 py-1.5"><div className="flex items-center gap-2 cursor-pointer" onClick={() => setSelCom(com)}><Avatar nom={com.nom} size={6} /><span className="text-sm font-medium text-gray-700 truncate max-w-[100px]">{com.nom}</span></div></td>
                           {data.months.map(m => { const d = com.monthly.find(r => r.month === m); return <td key={m} className="px-0.5 py-1.5"><HeatCell v={d?.signes || 0} max={heatMax} onClick={() => setSelCom(com)} /></td> })}
                           <td className="pl-4 py-1.5 text-right font-bold text-gray-800">{com.signes}</td>
                           <td className="pl-3 py-1.5 text-right text-xs text-gray-500">{com.delai_moy_creation_signature > 0 ? `${com.delai_moy_creation_signature}j` : '—'}</td>
                         </tr>
                       ))}
                     </tbody>
-                    <tfoot>
-                      <tr className="border-t-2 border-gray-200">
-                        <td className="pr-4 pt-2 pb-1 text-xs font-semibold text-gray-500">TOTAL</td>
-                        {data.months.map(m => { const total = data.par_commercial.reduce((s, c) => s + (c.monthly.find(r => r.month === m)?.signes || 0), 0); return <td key={m} className="px-0.5 pt-2 pb-1 text-center"><span className="text-xs font-bold text-gray-600">{total || ''}</span></td> })}
-                        <td className="pl-4 pt-2 pb-1 text-right font-bold text-blue-600">{data.meta.total_signes}</td>
-                        <td />
-                      </tr>
-                    </tfoot>
+                    <tfoot><tr className="border-t-2 border-gray-200">
+                      <td className="pr-4 pt-2 pb-1 text-xs font-semibold text-gray-500">TOTAL</td>
+                      {data.months.map(m => { const total = data.par_commercial.reduce((s, c) => s + (c.monthly.find(r => r.month === m)?.signes || 0), 0); return <td key={m} className="px-0.5 pt-2 pb-1 text-center"><span className="text-xs font-bold text-gray-600">{total || ''}</span></td> })}
+                      <td className="pl-4 pt-2 pb-1 text-right font-bold text-blue-600">{data.meta.total_signes}</td>
+                      <td />
+                    </tr></tfoot>
                   </table>
                 </div>
                 <div className="px-5 pb-4 flex items-center gap-2 text-xs text-gray-400">
