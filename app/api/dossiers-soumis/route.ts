@@ -21,6 +21,7 @@ const F = {
   STATUT_ABONNE:  'fldNBDnMAaxdSXEvR',
   PCT_REUSSITE:   'fldbIyoDdMo5RaHdp',
   MOIS_SIGNATURE: 'fldKe5WC67JAygPWV',
+  STATUT_ABONNE:  'fldNBDnMAaxdSXEvR',
 }
 
 function str(v: unknown): string {
@@ -87,8 +88,9 @@ export async function GET() {
         capex:        num(f[F.CAPEX]),
         kwc:          num(f[F.KWC]),
         installateur: instNom,
-        pct_reussite: str(f[F.PCT_REUSSITE]),
+        pct_reussite:   str(f[F.PCT_REUSSITE]),
         mois_signature: str(f[F.MOIS_SIGNATURE]),
+        statut_abonne:  str(f[F.STATUT_ABONNE]),
       }
     }).sort((a, b) => a.commercial.localeCompare(b.commercial))
 
@@ -100,14 +102,15 @@ export async function GET() {
 
 export async function PATCH(req: NextRequest) {
   try {
-    const { recordId, pct_reussite, mois_signature } = await req.json() as {
-      recordId: string; pct_reussite?: string; mois_signature?: string
+    const { recordId, pct_reussite, mois_signature, statut_abonne } = await req.json() as {
+      recordId: string; pct_reussite?: string; mois_signature?: string; statut_abonne?: string
     }
     if (!recordId) return NextResponse.json({ error: 'recordId requis' }, { status: 400 })
 
     const fields: Record<string, unknown> = {}
-    if (pct_reussite  !== undefined) fields[F.PCT_REUSSITE]   = pct_reussite  || null
+    if (pct_reussite   !== undefined) fields[F.PCT_REUSSITE]   = pct_reussite   || null
     if (mois_signature !== undefined) fields[F.MOIS_SIGNATURE] = mois_signature || null
+    if (statut_abonne  !== undefined) fields[F.STATUT_ABONNE]  = statut_abonne  || null
 
     const url = `https://api.airtable.com/v0/${BASE}/${TABLE}/${recordId}`
     const res = await fetch(url, {
