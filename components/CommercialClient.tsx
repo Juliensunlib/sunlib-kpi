@@ -20,6 +20,7 @@ type Objectifs = Record<string, Record<string, Record<string, number>>>
 interface DossierSoumis { id: string; nom: string; entreprise: string; segment: string; commercial: string; date_creation: string; capex: number; kwc: number; installateur: string; pct_reussite: string; mois_signature: string; statut_abonne: string }
 type SortDir = 'asc' | 'desc'
 type ViewType = 'leaderboard' | 'pipeline' | 'heatmap' | 'installateurs' | 'objectifs' | 'dossiers'
+type SortColInner = 'capex' | 'kwc' | 'date_creation'
 
 // ─── Formatters ───────────────────────────────────────────────────────────────
 const fmtK = (v: number) => {
@@ -258,18 +259,45 @@ function DossiersSoumisView({ dossiers, loading, onMount, onUpdate }: {
   const [search, setSearch]       = useState('')
   const [filterCom, setFilter]    = useState('')
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({})
+  const [sortCol, setSortCol]     = useState<SortColInner>('capex')
+  const [sortDir, setSortDir]     = useState<SortDir>('desc')
 
   useEffect(() => {
     if (!mounted) { setMounted(true); onMount() }
   }, [mounted, onMount])
 
-  const toggle = (com: string) => setCollapsed(prev => ({ ...prev, [com]: !prev[com] }))
+  const toggle = (com: string) =>
+    setCollapsed(prev => ({ ...prev, [com]: !prev[com] }))
+
+  const handleSort = (col: SortColInner) => {
+    if (col === sortCol) setSortDir(d => d === 'desc' ? 'asc' : 'desc')
+    else { setSortCol(col); setSortDir('desc') }
+  }
+
+  const sortIcon = (col: SortColInner) => {
+    if (col !== sortCol) return <span className="text-gray-300 ml-0.5">↕</span>
+    return <span className="text-amber-500 ml-0.5">{sortDir === 'desc' ? '↓' : '↑'}</span>
+  }
+
+  const sortItems = (items: DossierSoumis[]) =>
+    [...items].sort((a, b) => {
+      if (sortCol === 'capex') return sortDir === 'desc' ? b.capex - a.capex : a.capex - b.capex
+      if (sortCol === 'kwc')   return sortDir === 'desc' ? b.kwc - a.kwc     : a.kwc - b.kwc
+      if (sortCol === 'date_creation') {
+        const da = a.date_creation || '', db = b.date_creation || ''
+        return sortDir === 'desc' ? db.localeCompare(da) : da.localeCompare(db)
+      }
+      return 0
+    })
 
   const commerciaux = Array.from(new Set(dossiers.map(d => d.commercial))).sort()
 
   const filtered = dossiers.filter(d => {
     const matchCom    = !filterCom || d.commercial === filterCom
-    const matchSearch = !search || d.nom.toLowerCase().includes(search.toLowerCase()) || d.entreprise.toLowerCase().includes(search.toLowerCase()) || d.installateur.toLowerCase().includes(search.toLowerCase())
+    const matchSearch = !search
+      || d.nom.toLowerCase().includes(search.toLowerCase())
+      || d.entreprise.toLowerCase().includes(search.toLowerCase())
+      || d.installateur.toLowerCase().includes(search.toLowerCase())
     return matchCom && matchSearch
   })
 
@@ -321,7 +349,7 @@ function DossiersSoumisView({ dossiers, loading, onMount, onUpdate }: {
           <div className="flex-1">
             <h2 className="font-semibold text-gray-900">📋 Dossiers soumis</h2>
             <p className="text-xs text-gray-400 mt-0.5">
-              Dossiers sans contrat signé ni statut — {dossiers.length} au total · % réussite et mois de signature éditables directement
+              {dossiers.length} dossiers sans contrat signé ni statut · % réussite, mois et statut éditables directement
             </p>
           </div>
           <input type="text" placeholder="Rechercher abonné, installateur…" value={search} onChange={e => setSearch(e.target.value)}
@@ -348,22 +376,36 @@ function DossiersSoumisView({ dossiers, loading, onMount, onUpdate }: {
       )}
 
       {!loading && grouped.map(({ commercial, items }) => {
-        const isCollapsed  = collapsed[commercial]
-        const capexGroupe  = items.reduce((s, d) => s + d.capex, 0)
+        const isCollapsed = collapsed[commercial]
+        const capexGroupe = items.reduce((s, d) => s + d.capex, 0)
+        const kwcGroupe   = items.reduce((s, d) => s + d.kwc,   0)
+        const sortedItems = sortItems(items)
+
         return (
           <div key={commercial} className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
-            {/* Header cliquable */}
+            {/* Header cliquable avec totaux */}
             <button onClick={() => toggle(commercial)}
               className="w-full px-5 py-3 border-b border-gray-100 flex items-center gap-3 hover:bg-gray-50 transition-colors text-left">
               <Avatar nom={commercial} size={8} />
               <div className="flex-1">
                 <h3 className="font-semibold text-gray-900">{commercial}</h3>
-                <p className="text-xs text-gray-400">{items.length} dossier{items.length > 1 ? 's' : ''} · {fmtK(capexGroupe)} CAPEX</p>
+                <p className="text-xs text-gray-400">{items.length} dossier{items.length > 1 ? 's' : ''}</p>
+              </div>
+              {/* Totaux */}
+              <div className="flex items-center gap-6 mr-4">
+                <div className="text-right">
+                  <p className="text-xs text-gray-400">CAPEX total</p>
+                  <p className="text-sm font-bold text-gray-800">{fmtK(capexGroupe)}</p>
+                </div>
+                <div className="text-right">
+                  <p className="text-xs text-gray-400">kWc total</p>
+                  <p className="text-sm font-bold text-gray-800">{kwcGroupe.toFixed(1)}</p>
+                </div>
               </div>
               <span className="text-gray-400 text-lg">{isCollapsed ? '▶' : '▼'}</span>
             </button>
 
-            {/* Tableau — masqué si replié */}
+            {/* Tableau avec tri */}
             {!isCollapsed && (
               <div className="overflow-x-auto">
                 <table className="w-full text-sm">
@@ -371,17 +413,24 @@ function DossiersSoumisView({ dossiers, loading, onMount, onUpdate }: {
                     <tr>
                       <th className="px-3 py-2 text-left text-xs font-semibold text-gray-500">Abonné / Entreprise</th>
                       <th className="px-3 py-2 text-left text-xs font-semibold text-gray-500">Segment</th>
-                      <th className="px-3 py-2 text-right text-xs font-semibold text-gray-500">CAPEX</th>
-                      <th className="px-3 py-2 text-right text-xs font-semibold text-gray-500">kWc</th>
+                      {/* Colonnes triables */}
+                      <th onClick={() => handleSort('capex')} className="px-3 py-2 text-right text-xs font-semibold text-gray-500 cursor-pointer hover:text-gray-800 select-none whitespace-nowrap">
+                        CAPEX {sortIcon('capex')}
+                      </th>
+                      <th onClick={() => handleSort('kwc')} className="px-3 py-2 text-right text-xs font-semibold text-gray-500 cursor-pointer hover:text-gray-800 select-none whitespace-nowrap">
+                        kWc {sortIcon('kwc')}
+                      </th>
                       <th className="px-3 py-2 text-left text-xs font-semibold text-gray-500">Installateur</th>
-                      <th className="px-3 py-2 text-center text-xs font-semibold text-gray-500">Créé le</th>
+                      <th onClick={() => handleSort('date_creation')} className="px-3 py-2 text-center text-xs font-semibold text-gray-500 cursor-pointer hover:text-gray-800 select-none whitespace-nowrap">
+                        Créé le {sortIcon('date_creation')}
+                      </th>
                       <th className="px-3 py-2 text-center text-xs font-semibold text-gray-500 bg-amber-50">% Réussite</th>
                       <th className="px-3 py-2 text-center text-xs font-semibold text-gray-500 bg-blue-50">Mois signature</th>
                       <th className="px-3 py-2 text-center text-xs font-semibold text-gray-500 bg-red-50">Statut</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-50">
-                    {items.map(d => (
+                    {sortedItems.map(d => (
                       <tr key={d.id} className="hover:bg-gray-50 transition-colors">
                         <td className="px-3 py-2.5">
                           <p className="font-medium text-gray-800 text-sm truncate max-w-[180px]">{d.nom}</p>
@@ -397,13 +446,13 @@ function DossiersSoumisView({ dossiers, loading, onMount, onUpdate }: {
                         <td className="px-3 py-2.5 text-xs text-gray-600 truncate max-w-[140px]">{d.installateur || '—'}</td>
                         <td className="px-3 py-2.5 text-center text-xs text-gray-500">{fmtDate(d.date_creation)}</td>
                         <td className="px-3 py-2.5 text-center bg-amber-50/50">
-                          <select value={d.pct_reussite} onChange={e => onUpdate(d.id, e.target.value, undefined)}
+                          <select value={d.pct_reussite} onChange={e => onUpdate(d.id, e.target.value, undefined, undefined)}
                             className={`text-xs font-semibold px-2 py-1 rounded-lg border-0 cursor-pointer focus:ring-2 focus:ring-amber-300 ${pctBadgeColor(d.pct_reussite)}`}>
                             {PCT_OPTIONS.map(o => <option key={o} value={o}>{o || '—'}</option>)}
                           </select>
                         </td>
                         <td className="px-3 py-2.5 text-center bg-blue-50/50">
-                          <select value={d.mois_signature} onChange={e => onUpdate(d.id, undefined, e.target.value)}
+                          <select value={d.mois_signature} onChange={e => onUpdate(d.id, undefined, e.target.value, undefined)}
                             className="text-xs text-blue-700 bg-blue-50 px-2 py-1 rounded-lg border-0 cursor-pointer focus:ring-2 focus:ring-blue-300">
                             {MOIS_OPTIONS.map(o => <option key={o} value={o}>{o || '—'}</option>)}
                           </select>
@@ -645,7 +694,6 @@ export default function CommercialClient() {
 
   async function updateDossier(recordId: string, pct_reussite?: string, mois_signature?: string, statut_abonne?: string) {
     await fetch('/api/dossiers-soumis', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ recordId, pct_reussite, mois_signature, statut_abonne }) })
-    // Si statut mis à Annulé/Refusé/Repris → retirer de la liste car ne correspond plus au filtre
     if (statut_abonne !== undefined && statut_abonne !== '') {
       setDossiers(prev => prev.filter(d => d.id !== recordId))
     } else {
@@ -724,7 +772,6 @@ export default function CommercialClient() {
       {selPipe && data && <PipelinePanel pipe={selPipe} onClose={() => setSelPipe(null)} />}
 
       <main className="max-w-screen-2xl mx-auto px-4 py-5 space-y-4">
-        {/* Vue Dossiers : indépendante du chargement principal */}
         {view === 'dossiers' && (
           <DossiersSoumisView dossiers={dossiers} loading={dossLoading} onMount={loadDossiers} onUpdate={updateDossier} />
         )}
@@ -750,7 +797,6 @@ export default function CommercialClient() {
               ))}
             </div>
 
-            {/* ── LEADERBOARD ── */}
             {view === 'leaderboard' && (
               <div className="space-y-4">
                 {top3.length >= 2 && (
@@ -806,7 +852,6 @@ export default function CommercialClient() {
               </div>
             )}
 
-            {/* ── PIPELINE ── */}
             {view === 'pipeline' && (
               <div className="space-y-4">
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
@@ -862,7 +907,6 @@ export default function CommercialClient() {
               </div>
             )}
 
-            {/* ── HEATMAP ── */}
             {view === 'heatmap' && (
               <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
                 <div className="px-5 py-4 border-b border-gray-100"><h2 className="font-semibold text-gray-900">Heatmap — Contrats signés par commercial et par mois</h2></div>
@@ -900,7 +944,6 @@ export default function CommercialClient() {
               </div>
             )}
 
-            {/* ── INSTALLATEURS ── */}
             {view === 'installateurs' && (
               <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
                 <div className="px-5 py-4 border-b border-gray-100 flex items-center gap-4">
@@ -946,7 +989,6 @@ export default function CommercialClient() {
               </div>
             )}
 
-            {/* ── OBJECTIFS (admin seulement) ── */}
             {view === 'objectifs' && role === 'admin' && (
               <ObjectifsView data={data} objectifs={objectifs} anneeFilter={annee} />
             )}
