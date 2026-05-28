@@ -391,19 +391,30 @@ function DossiersSoumisView({ dossiers, loading, onMount, onUpdate }: {
                 <h3 className="font-semibold text-gray-900">{commercial}</h3>
                 <p className="text-xs text-gray-400">{items.length} dossier{items.length > 1 ? 's' : ''}</p>
               </div>
+              {/* Répartition CAPEX par % — visible même replié */}
+              <div className="hidden lg:flex items-center gap-1.5 mr-4">
+                {[
+                  { pct: '',     label: 'N/A',  color: 'text-gray-500 bg-gray-100'      },
+                  { pct: '0%',   label: '0%',   color: 'text-red-500 bg-red-50'         },
+                  { pct: '25%',  label: '25%',  color: 'text-red-400 bg-red-50'         },
+                  { pct: '50%',  label: '50%',  color: 'text-orange-500 bg-orange-50'   },
+                  { pct: '75%',  label: '75%',  color: 'text-orange-500 bg-orange-50'   },
+                  { pct: '100%', label: '100%', color: 'text-emerald-600 bg-emerald-50' },
+                ].map(({ pct, label, color }) => {
+                  const capex = items.filter(d => d.pct_reussite === pct).reduce((s, d) => s + d.capex, 0)
+                  const count = items.filter(d => d.pct_reussite === pct).length
+                  if (count === 0) return null
+                  return (
+                    <div key={pct} className={`text-center px-2 py-1 rounded-lg ${color}`}
+                      title={`${count} dossier${count > 1 ? 's' : ''} à ${label}`}>
+                      <p className="text-xs font-semibold leading-none">{label}</p>
+                      <p className="text-xs font-bold leading-tight mt-0.5">{fmtK(capex)}</p>
+                    </div>
+                  )
+                })}
+              </div>
               {/* Totaux */}
               <div className="flex items-center gap-6 mr-4">
-                <div className="text-right">
-                  <p className="text-xs text-gray-400">CAPEX total</p>
-                  <p className="text-sm font-bold text-gray-800">{fmtK(capexGroupe)}</p>
-                </div>
-                <div className="text-right">
-                  <p className="text-xs text-gray-400">kWc total</p>
-                  <p className="text-sm font-bold text-gray-800">{kwcGroupe.toFixed(1)}</p>
-                </div>
-              </div>
-              <span className="text-gray-400 text-lg">{isCollapsed ? '▶' : '▼'}</span>
-            </button>
 
             {/* Tableau avec tri */}
             {!isCollapsed && (
