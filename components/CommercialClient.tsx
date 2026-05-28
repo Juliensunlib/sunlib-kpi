@@ -242,6 +242,15 @@ function ObjectifsView({ data, objectifs, anneeFilter }: { data: ApiData; object
 const PCT_OPTIONS  = ['', '0%', '25%', '50%', '75%', '100%']
 const MOIS_OPTIONS = ['', 'Janvier', 'Février', 'Mars', 'Avril', 'Mai', 'Juin', 'Juillet', 'Aout', 'Septembre', 'Octobre', 'Décembre']
 
+const PCT_BADGES = [
+  { pct: '',     label: 'N/A',  color: 'text-gray-500 bg-gray-100'      },
+  { pct: '0%',   label: '0%',   color: 'text-red-500 bg-red-50'         },
+  { pct: '25%',  label: '25%',  color: 'text-red-400 bg-red-50'         },
+  { pct: '50%',  label: '50%',  color: 'text-orange-500 bg-orange-50'   },
+  { pct: '75%',  label: '75%',  color: 'text-orange-500 bg-orange-50'   },
+  { pct: '100%', label: '100%', color: 'text-emerald-600 bg-emerald-50' },
+]
+
 function pctBadgeColor(pct: string) {
   if (pct === '100%') return 'text-emerald-600 bg-emerald-50'
   if (pct === '75%' || pct === '50%') return 'text-orange-500 bg-orange-50'
@@ -306,7 +315,6 @@ function DossiersSoumisView({ dossiers, loading, onMount, onUpdate }: {
     .map(c => ({ commercial: c, items: filtered.filter(d => d.commercial === c) }))
     .filter(g => g.items.length > 0)
 
-  // Cards stats
   const capexTotal   = dossiers.reduce((s, d) => s + d.capex, 0)
   const sansPct      = dossiers.filter(d => !d.pct_reussite)
   const capexSansPct = sansPct.reduce((s, d) => s + d.capex, 0)
@@ -383,24 +391,17 @@ function DossiersSoumisView({ dossiers, loading, onMount, onUpdate }: {
 
         return (
           <div key={commercial} className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
-            {/* Header cliquable avec totaux */}
+            {/* Header cliquable avec répartition % + totaux */}
             <button onClick={() => toggle(commercial)}
               className="w-full px-5 py-3 border-b border-gray-100 flex items-center gap-3 hover:bg-gray-50 transition-colors text-left">
               <Avatar nom={commercial} size={8} />
-              <div className="flex-1">
+              <div className="flex-1 min-w-0">
                 <h3 className="font-semibold text-gray-900">{commercial}</h3>
                 <p className="text-xs text-gray-400">{items.length} dossier{items.length > 1 ? 's' : ''}</p>
               </div>
-              {/* Répartition CAPEX par % — visible même replié */}
-              <div className="hidden lg:flex items-center gap-1.5 mr-4">
-                {[
-                  { pct: '',     label: 'N/A',  color: 'text-gray-500 bg-gray-100'      },
-                  { pct: '0%',   label: '0%',   color: 'text-red-500 bg-red-50'         },
-                  { pct: '25%',  label: '25%',  color: 'text-red-400 bg-red-50'         },
-                  { pct: '50%',  label: '50%',  color: 'text-orange-500 bg-orange-50'   },
-                  { pct: '75%',  label: '75%',  color: 'text-orange-500 bg-orange-50'   },
-                  { pct: '100%', label: '100%', color: 'text-emerald-600 bg-emerald-50' },
-                ].map(({ pct, label, color }) => {
+              {/* Badges répartition par % */}
+              <div className="hidden lg:flex items-center gap-1.5">
+                {PCT_BADGES.map(({ pct, label, color }) => {
                   const capex = items.filter(d => d.pct_reussite === pct).reduce((s, d) => s + d.capex, 0)
                   const count = items.filter(d => d.pct_reussite === pct).length
                   if (count === 0) return null
@@ -414,7 +415,18 @@ function DossiersSoumisView({ dossiers, loading, onMount, onUpdate }: {
                 })}
               </div>
               {/* Totaux */}
-              <div className="flex items-center gap-6 mr-4">
+              <div className="flex items-center gap-4 mx-4">
+                <div className="text-right">
+                  <p className="text-xs text-gray-400">CAPEX total</p>
+                  <p className="text-sm font-bold text-gray-800">{fmtK(capexGroupe)}</p>
+                </div>
+                <div className="text-right">
+                  <p className="text-xs text-gray-400">kWc total</p>
+                  <p className="text-sm font-bold text-gray-800">{kwcGroupe.toFixed(1)}</p>
+                </div>
+              </div>
+              <span className="text-gray-400 text-lg flex-shrink-0">{isCollapsed ? '▶' : '▼'}</span>
+            </button>
 
             {/* Tableau avec tri */}
             {!isCollapsed && (
@@ -424,7 +436,6 @@ function DossiersSoumisView({ dossiers, loading, onMount, onUpdate }: {
                     <tr>
                       <th className="px-3 py-2 text-left text-xs font-semibold text-gray-500">Abonné / Entreprise</th>
                       <th className="px-3 py-2 text-left text-xs font-semibold text-gray-500">Segment</th>
-                      {/* Colonnes triables */}
                       <th onClick={() => handleSort('capex')} className="px-3 py-2 text-right text-xs font-semibold text-gray-500 cursor-pointer hover:text-gray-800 select-none whitespace-nowrap">
                         CAPEX {sortIcon('capex')}
                       </th>
