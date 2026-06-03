@@ -51,6 +51,7 @@ const F = {
   ETAT_F2:            'fldFbme1enY3VGb40',
   ETAT_F3:            'fldDZe4wp4DTRHIzC',
   DUREE_F2_J:         'fldzMJMqnDQ5eNRUo',
+  DATE_MODIF_F2:      'fldqgM43dAtlXbz0y',
   KWC:                'fldTJkt211i53Ktmy',
   CAPEX_HT:           'fldplSMBmal4BFo3O',
   ABONNEMENT_KPI:     'fldBm8DaWTWaH7Ccs',
@@ -126,17 +127,19 @@ export async function GET(req: NextRequest) {
         ensure(moisSig).signes.push(r)
       }
 
-      if (etatF2 === 'Validée' && moisSig) {
+      if (etatF2 === 'Validée') {
+        // Date réelle de pose = dernière modification de l'état F2 (quand il passe à Validée)
+        const dateF2 = str(f[F.DATE_MODIF_F2])
         let moisPose = moisSig
-        const ds = str(f[F.DATE_SIGNATURE])
-        if (ds && dureeF2 > 0) {
-          const d = new Date(ds)
+        if (dateF2) {
+          const d = new Date(dateF2)
           if (!isNaN(d.getTime())) {
-            d.setDate(d.getDate() + dureeF2)
             moisPose = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
           }
         }
-        ensure(moisPose).poses.push(r)
+        if (moisPose && (!annee || moisPose.startsWith(String(annee)))) {
+          ensure(moisPose).poses.push(r)
+        }
       }
 
       if (etatF3 === 'Validée' && moisSig) {
