@@ -11,14 +11,15 @@ const AT_KEY           = process.env.AIRTABLE_API_KEY!
 
 // ─── OAuth token ──────────────────────────────────────────────────────────────
 async function getSellsyToken(): Promise<string> {
+  const params = new URLSearchParams()
+  params.set('grant_type',    'client_credentials')
+  params.set('client_id',     process.env.SELLSY_CLIENT_ID!)
+  params.set('client_secret', process.env.SELLSY_CLIENT_SECRET!)
+
   const res = await fetch(SELLSY_TOKEN_URL, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      grant_type:    'client_credentials',
-      client_id:     process.env.SELLSY_CLIENT_ID,
-      client_secret: process.env.SELLSY_CLIENT_SECRET,
-    }),
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: params.toString(),
   })
   if (!res.ok) throw new Error(`Sellsy token error: ${await res.text()}`)
   const d = await res.json() as { access_token: string }
