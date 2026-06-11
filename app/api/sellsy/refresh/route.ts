@@ -117,7 +117,7 @@ function buildMonthMap(invoices: SellsyInvoice[]): Map<string, MonthData> {
 }
 
 function mapToSorted(m: Map<string, MonthData>): MonthData[] {
-  return Array.from(m.values()).sort((a, b) => a.month.localeCompare(b.month))
+  return Array.from(m.values()).sort((a, b) => b.month.localeCompare(a.month))
 }
 
 function summarize(monthly: MonthData[]) {
