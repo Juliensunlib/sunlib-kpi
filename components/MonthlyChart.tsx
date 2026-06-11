@@ -20,7 +20,7 @@ const fmtEur = (v: number) =>
   v >= 1_000_000
     ? `${(v / 1_000_000).toFixed(2)} M€`
     : v >= 1_000
-      ? `${Math.round(v / 1_000)}k€`
+      ? `${(v / 1_000).toFixed(1)}k€`
       : `${Math.round(v)}€`
 
 // Tooltip personnalisé
