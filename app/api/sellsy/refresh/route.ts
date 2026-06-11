@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 
 export const dynamic = 'force-dynamic'
-export const maxDuration = 60
+export const maxDuration = 300
 
 const SELLSY_TOKEN_URL = 'https://login.sellsy.com/oauth2/access-tokens'
 const SELLSY_API       = 'https://api.sellsy.com/v2'
@@ -117,26 +117,24 @@ async function aggregate(token: string, invoices: SellsyInvoice[]): Promise<Cach
   const caMap  = new Map<string, MonthData>()
   const cauMap = new Map<string, MonthData>()
 
-  // Fetch détails en batches de 10 appels parallèles
-  const BATCH = 10
-  for (let i = 0; i < invoices.length; i += BATCH) {
-    const batch = invoices.slice(i, i + BATCH)
-    const results = await Promise.all(
-      batch.map(inv => isCaution(token, inv.id).then(cau => ({ inv, cau })))
-    )
+  // Appels séquentiels avec 800ms entre chaque pour respecter le rate limit Sellsy
+  const sleep = (ms: number) => new Promise(r => setTimeout(r, ms))
 
-    for (const { inv, cau } of results) {
-      const mois = inv.date.slice(0, 7)
-      const ht   = parseFloat(inv.amounts?.total_excl_tax || '0') || 0
-      const map  = cau ? cauMap : caMap
+  for (let i = 0; i < invoices.length; i++) {
+    const inv = invoices[i]
+    const cau = await isCaution(token, inv.id)
+    if (i < invoices.length - 1) await sleep(800)
 
-      if (!map.has(mois)) {
-        map.set(mois, { month: mois, label: monthLabel(mois), nb: 0, total_ht: 0 })
-      }
-      const row = map.get(mois)!
-      row.nb       += 1
-      row.total_ht += ht
+    const mois = inv.date.slice(0, 7)
+    const ht   = parseFloat(inv.amounts?.total_excl_tax || '0') || 0
+    const map  = cau ? cauMap : caMap
+
+    if (!map.has(mois)) {
+      map.set(mois, { month: mois, label: monthLabel(mois), nb: 0, total_ht: 0 })
     }
+    const row = map.get(mois)!
+    row.nb       += 1
+    row.total_ht += ht
   }
 
   const sortDesc = (a: MonthData, b: MonthData) => b.month.localeCompare(a.month)
