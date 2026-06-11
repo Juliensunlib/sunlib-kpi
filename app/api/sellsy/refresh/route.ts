@@ -58,7 +58,7 @@ async function fetchAllPaidInvoices(
     let res: Response | null = null
     for (let attempt = 0; attempt < 5; attempt++) {
       res = await fetch(
-        `${SELLSY_API}/invoices/search?limit=${limit}&offset=${offset}&order=date&direction=desc`,
+        `${SELLSY_API}/invoices/search?limit=${limit}&offset=${offset}&order=date&direction=asc`,
         {
           method: 'POST',
           headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
@@ -68,10 +68,13 @@ async function fetchAllPaidInvoices(
       if (res.status === 429) { await sleep((attempt + 1) * 2000); continue }
       break
     }
-    if (!res || !res.ok) throw new Error(`Sellsy search error: ${await res?.text()}`)
+    if (!res || !res.ok) throw new Error(`Sellsy search error (offset=${offset}): ${await res?.text()}`)
 
     const d = await res.json() as { data: SellsyInvoice[]; pagination: { total: number } }
     all.push(...d.data)
+
+    console.log(`[Sellsy] fetched ${all.length}/${d.pagination.total}`)
+
     offset += limit
     if (offset >= d.pagination.total) break
     await sleep(300)
@@ -81,7 +84,6 @@ async function fetchAllPaidInvoices(
 }
 
 // ─── Classification par subject ───────────────────────────────────────────────
-// Si le subject contient "caution" (case-insensitive) → caution, sinon → CA
 function isCaution(inv: SellsyInvoice): boolean {
   return inv.subject?.toLowerCase().includes('caution') ?? false
 }
@@ -115,7 +117,7 @@ function buildMonthMap(invoices: SellsyInvoice[]): Map<string, MonthData> {
 }
 
 function mapToSorted(m: Map<string, MonthData>): MonthData[] {
-  return Array.from(m.values()).sort((a, b) => b.month.localeCompare(a.month))
+  return Array.from(m.values()).sort((a, b) => a.month.localeCompare(b.month))
 }
 
 function summarize(monthly: MonthData[]) {
@@ -127,23 +129,6 @@ function summarize(monthly: MonthData[]) {
 }
 
 // ─── Cache Airtable ───────────────────────────────────────────────────────────
-async function readExistingCache(): Promise<CacheData | null> {
-  try {
-    const url = `https://api.airtable.com/v0/${BASE}/${TABLE}?sort[0][field]=cache_date&sort[0][direction]=desc&pageSize=1`
-    const res = await fetch(url, { headers: { Authorization: `Bearer ${AT_KEY}` } })
-    if (!res.ok) return null
-    const d = await res.json() as { records: Array<{ fields: { cache_data: string } }> }
-    if (!d.records.length) return null
-    return JSON.parse(d.records[0].fields.cache_data) as CacheData
-  } catch { return null }
-}
-
-function mergeMonthly(existing: MonthData[], fresh: MonthData[]): MonthData[] {
-  const m = new Map(existing.map(r => [r.month, { ...r }]))
-  for (const fm of fresh) m.set(fm.month, fm)
-  return Array.from(m.values()).sort((a, b) => b.month.localeCompare(a.month))
-}
-
 async function saveToAirtable(data: CacheData): Promise<void> {
   const now = new Date().toISOString().slice(0, 16).replace('T', ' ')
   const res = await fetch(`https://api.airtable.com/v0/${BASE}/${TABLE}`, {
@@ -176,26 +161,33 @@ async function cleanOldCache(): Promise<void> {
 export async function POST(req: Request) {
   try {
     const { searchParams } = new URL(req.url)
-    const month = searchParams.get('month') // ex: 2025-01
+    const month   = searchParams.get('month')         // ex: 2025-01 → un mois précis
+    const full    = searchParams.get('full') === 'true' // tout l'historique
+    const dryRun  = searchParams.get('dry_run') === 'true' // ne pas écrire en Airtable
 
     const token = await getSellsyToken()
 
     let dateStart: string | undefined
     let dateEnd:   string | undefined
+    let mode: string
 
-    if (month) {
+    if (full) {
+      // Pas de filtre de date → tout l'historique
+      mode = 'full historique'
+    } else if (month) {
       const [y, m] = month.split('-').map(Number)
       dateStart = `${y}-${String(m).padStart(2, '0')}-01`
       const lastDay = new Date(y, m, 0).getDate()
-      dateEnd = `${y}-${String(m).padStart(2, '0')}-${lastDay}`
+      dateEnd   = `${y}-${String(m).padStart(2, '0')}-${lastDay}`
+      mode = `mois ${month}`
     } else {
-      // Incrémental quotidien : 3 derniers mois
+      // Cron quotidien : 3 derniers mois
       const d = new Date()
       d.setMonth(d.getMonth() - 3)
       dateStart = d.toISOString().slice(0, 10)
+      mode = 'incrémental (3 mois)'
     }
 
-    // Un seul search paginé — classification par subject, pas d'appel par facture
     const invoices = await fetchAllPaidInvoices(token, dateStart, dateEnd)
 
     const caInvoices  = invoices.filter(inv => !isCaution(inv))
@@ -204,39 +196,34 @@ export async function POST(req: Request) {
     const caMonthly  = mapToSorted(buildMonthMap(caInvoices))
     const cauMonthly = mapToSorted(buildMonthMap(cauInvoices))
 
-    const freshData: CacheData = {
+    const finalData: CacheData = {
       ca:      summarize(caMonthly),
       caution: summarize(cauMonthly),
       last_updated: new Date().toISOString(),
     }
 
-    // Merge avec cache existant
-    const existing = await readExistingCache()
-    let finalData: CacheData
-    if (existing) {
-      const mergedCa  = mergeMonthly(existing.ca.monthly,      caMonthly)
-      const mergedCau = mergeMonthly(existing.caution.monthly,  cauMonthly)
-      finalData = {
-        ca:      summarize(mergedCa),
-        caution: summarize(mergedCau),
-        last_updated: new Date().toISOString(),
-      }
-    } else {
-      finalData = freshData
+    if (!dryRun) {
+      await saveToAirtable(finalData)
+      await cleanOldCache()
     }
 
-    await saveToAirtable(finalData)
-    await cleanOldCache()
+    // Aperçu des 5 premiers subjects pour valider la classification
+    const sampleCa  = caInvoices.slice(0, 3).map(i => i.subject)
+    const sampleCau = cauInvoices.slice(0, 3).map(i => i.subject)
 
     return NextResponse.json({
       ok:            true,
-      mode:          month ? `mois ${month}` : 'incrémental (3 mois)',
+      mode,
+      dry_run:       dryRun,
       total_fetched: invoices.length,
       ca_invoices:   caInvoices.length,
       cau_invoices:  cauInvoices.length,
-      ca_total:      Math.round(finalData.ca.total_ht),
-      caution_total: Math.round(finalData.caution.total_ht),
-      last_updated:  finalData.last_updated,
+      ca_total_ht:   Math.round(finalData.ca.total_ht),
+      caution_total_ht: Math.round(finalData.caution.total_ht),
+      // pour vérifier que la classification est correcte
+      sample_ca_subjects:      sampleCa,
+      sample_caution_subjects: sampleCau,
+      last_updated: finalData.last_updated,
     })
   } catch (e) {
     console.error('[Sellsy refresh]', e)
