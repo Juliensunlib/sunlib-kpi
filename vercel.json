@@ -3,6 +3,14 @@
     {
       "path": "/api/snapshot",
       "schedule": "0 8 * * 1-5"
+    },
+    {
+      "path": "/api/sellsy/refresh",
+      "schedule": "0 7 * * 1-5"
+    },
+    {
+      "path": "/api/sellsy/refresh",
+      "schedule": "0 19 * * 1-5"
     }
   ]
 }
