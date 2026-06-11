@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 
 export const dynamic = 'force-dynamic'
-export const maxDuration = 800
+export const maxDuration = 300
 
 const SELLSY_TOKEN_URL = 'https://login.sellsy.com/oauth2/access-tokens'
 const SELLSY_API       = 'https://api.sellsy.com/v2'
@@ -26,7 +26,8 @@ async function getSellsyToken(): Promise<string> {
   return d.access_token
 }
 
-// ─── Fetch toutes les factures payées (paginé) ────────────────────────────────
+const sleep = (ms: number) => new Promise(r => setTimeout(r, ms))
+
 interface SellsyInvoice {
   id: number
   number: string
@@ -35,83 +36,54 @@ interface SellsyInvoice {
   amounts: { total_excl_tax: string }
 }
 
-const sleep = (ms: number) => new Promise(r => setTimeout(r, ms))
-
-async function sellsyFetch(token: string, url: string, body?: object, retries = 5): Promise<Response> {
-  for (let i = 0; i < retries; i++) {
-    const res = await fetch(url, {
-      method: body ? 'POST' : 'GET',
-      headers: {
-        Authorization:  `Bearer ${token}`,
-        'Content-Type': 'application/json',
-      },
-      ...(body ? { body: JSON.stringify(body) } : {}),
-    })
-    if (res.status === 429) {
-      const wait = (i + 1) * 2000
-      console.log(`Rate limit hit, waiting ${wait}ms...`)
-      await sleep(wait)
-      continue
-    }
-    return res
-  }
-  throw new Error('Max retries reached on Sellsy API')
-}
-
-async function fetchAllPaidInvoices(token: string, dateStart?: string, dateEnd?: string): Promise<SellsyInvoice[]> {
+// ─── Fetch toutes les factures payées (paginé) ────────────────────────────────
+async function fetchAllPaidInvoices(
+  token: string,
+  dateStart?: string,
+  dateEnd?: string
+): Promise<SellsyInvoice[]> {
   const all: SellsyInvoice[] = []
   let offset = 0
-  const limit = 50
+  const limit = 100
 
   const filters: Record<string, unknown> = { status: ['paid'] }
   if (dateStart || dateEnd) {
     filters.date = {
       ...(dateStart ? { start: dateStart } : {}),
-      ...(dateEnd   ? { end: dateEnd }     : {}),
+      ...(dateEnd   ? { end:   dateEnd   } : {}),
     }
   }
 
   while (true) {
-    const res = await sellsyFetch(
-      token,
-      `${SELLSY_API}/invoices/search?limit=${limit}&offset=${offset}&order=date&direction=desc`,
-      { filters }
-    )
-    if (!res.ok) throw new Error(`Sellsy invoices error: ${await res.text()}`)
-    const d = await res.json() as {
-      data: SellsyInvoice[]
-      pagination: { total: number }
+    let res: Response | null = null
+    for (let attempt = 0; attempt < 5; attempt++) {
+      res = await fetch(
+        `${SELLSY_API}/invoices/search?limit=${limit}&offset=${offset}&order=date&direction=desc`,
+        {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ filters }),
+        }
+      )
+      if (res.status === 429) { await sleep((attempt + 1) * 2000); continue }
+      break
     }
+    if (!res || !res.ok) throw new Error(`Sellsy search error: ${await res?.text()}`)
+
+    const d = await res.json() as { data: SellsyInvoice[]; pagination: { total: number } }
     all.push(...d.data)
-    if (all.length >= d.pagination.total) break
     offset += limit
-    await sleep(1000)
+    if (offset >= d.pagination.total) break
+    await sleep(300)
   }
 
   return all
 }
 
-// ─── Fetch détail d'une facture pour lire les lignes ─────────────────────────
-interface InvoiceRow {
-  type: string
-  reference?: string
-}
-
-async function fetchInvoiceRows(token: string, id: number): Promise<InvoiceRow[]> {
-  try {
-    const res = await sellsyFetch(token, `${SELLSY_API}/invoices/${id}`)
-    if (!res.ok) return []
-    const d = await res.json() as { rows?: InvoiceRow[] }
-    return d.rows || []
-  } catch {
-    return []
-  }
-}
-
-// Détecte si une facture est une caution via ses lignes (référence commence par CAU)
-async function isCaution(token: string, id: number): Promise<boolean> {
-  const rows = await fetchInvoiceRows(token, id)
-  return rows.some(r => (r.reference || '').toUpperCase().startsWith('CAU'))
+// ─── Classification par subject ───────────────────────────────────────────────
+// Si le subject contient "caution" (case-insensitive) → caution, sinon → CA
+function isCaution(inv: SellsyInvoice): boolean {
+  return inv.subject?.toLowerCase().includes('caution') ?? false
 }
 
 // ─── Agrégation par mois ──────────────────────────────────────────────────────
@@ -122,83 +94,68 @@ function monthLabel(ym: string): string {
     .replace('.', '')
 }
 
-interface MonthData {
-  month: string
-  label: string
-  nb: number
-  total_ht: number
-}
-
+interface MonthData { month: string; label: string; nb: number; total_ht: number }
 interface CacheData {
   ca:      { monthly: MonthData[]; total_ht: number; nb: number }
   caution: { monthly: MonthData[]; total_ht: number; nb: number }
   last_updated: string
 }
 
-async function aggregate(token: string, invoices: SellsyInvoice[]): Promise<CacheData> {
-  const caMap  = new Map<string, MonthData>()
-  const cauMap = new Map<string, MonthData>()
-
-  // Appels séquentiels avec 800ms entre chaque pour respecter le rate limit Sellsy
-  for (let i = 0; i < invoices.length; i++) {
-    const inv = invoices[i]
-    const cau = await isCaution(token, inv.id)
-    if (i < invoices.length - 1) await sleep(800)
-
+function buildMonthMap(invoices: SellsyInvoice[]): Map<string, MonthData> {
+  const map = new Map<string, MonthData>()
+  for (const inv of invoices) {
     const mois = inv.date.slice(0, 7)
     const ht   = parseFloat(inv.amounts?.total_excl_tax || '0') || 0
-    const map  = cau ? cauMap : caMap
-
-    if (!map.has(mois)) {
-      map.set(mois, { month: mois, label: monthLabel(mois), nb: 0, total_ht: 0 })
-    }
+    if (!map.has(mois)) map.set(mois, { month: mois, label: monthLabel(mois), nb: 0, total_ht: 0 })
     const row = map.get(mois)!
     row.nb       += 1
     row.total_ht += ht
   }
+  return map
+}
 
-  const sortDesc = (a: MonthData, b: MonthData) => b.month.localeCompare(a.month)
-  const caMonthly  = Array.from(caMap.values()).sort(sortDesc)
-  const cauMonthly = Array.from(cauMap.values()).sort(sortDesc)
+function mapToSorted(m: Map<string, MonthData>): MonthData[] {
+  return Array.from(m.values()).sort((a, b) => b.month.localeCompare(a.month))
+}
 
+function summarize(monthly: MonthData[]) {
   return {
-    ca: {
-      monthly:  caMonthly,
-      total_ht: caMonthly.reduce((s, r) => s + r.total_ht, 0),
-      nb:       caMonthly.reduce((s, r) => s + r.nb, 0),
-    },
-    caution: {
-      monthly:  cauMonthly,
-      total_ht: cauMonthly.reduce((s, r) => s + r.total_ht, 0),
-      nb:       cauMonthly.reduce((s, r) => s + r.nb, 0),
-    },
-    last_updated: new Date().toISOString(),
+    monthly,
+    total_ht: monthly.reduce((s, r) => s + r.total_ht, 0),
+    nb:       monthly.reduce((s, r) => s + r.nb, 0),
   }
 }
 
-// ─── Sauvegarder dans Airtable ────────────────────────────────────────────────
+// ─── Cache Airtable ───────────────────────────────────────────────────────────
+async function readExistingCache(): Promise<CacheData | null> {
+  try {
+    const url = `https://api.airtable.com/v0/${BASE}/${TABLE}?sort[0][field]=cache_date&sort[0][direction]=desc&pageSize=1`
+    const res = await fetch(url, { headers: { Authorization: `Bearer ${AT_KEY}` } })
+    if (!res.ok) return null
+    const d = await res.json() as { records: Array<{ fields: { cache_data: string } }> }
+    if (!d.records.length) return null
+    return JSON.parse(d.records[0].fields.cache_data) as CacheData
+  } catch { return null }
+}
+
+function mergeMonthly(existing: MonthData[], fresh: MonthData[]): MonthData[] {
+  const m = new Map(existing.map(r => [r.month, { ...r }]))
+  for (const fm of fresh) m.set(fm.month, fm)
+  return Array.from(m.values()).sort((a, b) => b.month.localeCompare(a.month))
+}
+
 async function saveToAirtable(data: CacheData): Promise<void> {
   const now = new Date().toISOString().slice(0, 16).replace('T', ' ')
   const res = await fetch(`https://api.airtable.com/v0/${BASE}/${TABLE}`, {
     method: 'POST',
-    headers: {
-      Authorization:  `Bearer ${AT_KEY}`,
-      'Content-Type': 'application/json',
-    },
+    headers: { Authorization: `Bearer ${AT_KEY}`, 'Content-Type': 'application/json' },
     body: JSON.stringify({
-      records: [{
-        fields: {
-          cache_date: now,
-          cache_data: JSON.stringify(data),
-          cache_type: 'sellsy',
-        }
-      }]
+      records: [{ fields: { cache_date: now, cache_data: JSON.stringify(data), cache_type: 'sellsy' } }]
     }),
   })
   if (!res.ok) throw new Error(`Airtable save error: ${await res.text()}`)
 }
 
-// ─── Nettoyage anciens caches (garde les 10 derniers) ─────────────────────────
 async function cleanOldCache(): Promise<void> {
   const url = `https://api.airtable.com/v0/${BASE}/${TABLE}?sort[0][field]=cache_date&sort[0][direction]=desc&pageSize=100`
   const res = await fetch(url, { headers: { Authorization: `Bearer ${AT_KEY}` } })
@@ -206,8 +163,6 @@ async function cleanOldCache(): Promise<void> {
   const d = await res.json() as { records: { id: string }[] }
   const toDelete = d.records.slice(10).map(r => r.id)
   if (!toDelete.length) return
-
-  // Supprimer par batch de 10
   for (let i = 0; i < toDelete.length; i += 10) {
     const ids = toDelete.slice(i, i + 10).map(id => `records[]=${id}`).join('&')
     await fetch(`https://api.airtable.com/v0/${BASE}/${TABLE}?${ids}`, {
@@ -217,87 +172,70 @@ async function cleanOldCache(): Promise<void> {
   }
 }
 
-// Lire le cache existant depuis Airtable
-async function readExistingCache(): Promise<CacheData | null> {
-  try {
-    const url = `https://api.airtable.com/v0/${BASE}/${TABLE}?sort[0][field]=cache_date&sort[0][direction]=desc&pageSize=1`
-    const res = await fetch(url, { headers: { Authorization: `Bearer ${AT_KEY}` } })
-    if (!res.ok) return null
-    const d = await res.json() as { records: Array<{ fields: { cache_data: string } }> }
-    if (!d.records.length) return null
-    return JSON.parse(d.records[0].fields.cache_data) as CacheData
-  } catch {
-    return null
-  }
-}
-
-// Merger les nouvelles données dans le cache existant
-function mergeIntoCache(existing: CacheData, fresh: CacheData): CacheData {
-  // Pour chaque mois des nouvelles données, on écrase dans le cache existant
-  const mergeMonthly = (existingMonths: MonthData[], freshMonths: MonthData[]): MonthData[] => {
-    const map = new Map(existingMonths.map(m => [m.month, { ...m }]))
-    for (const fm of freshMonths) {
-      map.set(fm.month, fm) // écrase les mois récents
-    }
-    return Array.from(map.values()).sort((a, b) => b.month.localeCompare(a.month))
-  }
-
-  const caMonthly  = mergeMonthly(existing.ca.monthly,      fresh.ca.monthly)
-  const cauMonthly = mergeMonthly(existing.caution.monthly,  fresh.caution.monthly)
-
-  return {
-    ca: {
-      monthly:  caMonthly,
-      total_ht: caMonthly.reduce((s, r) => s + r.total_ht, 0),
-      nb:       caMonthly.reduce((s, r) => s + r.nb, 0),
-    },
-    caution: {
-      monthly:  cauMonthly,
-      total_ht: cauMonthly.reduce((s, r) => s + r.total_ht, 0),
-      nb:       cauMonthly.reduce((s, r) => s + r.nb, 0),
-    },
-    last_updated: new Date().toISOString(),
-  }
-}
-
+// ─── Handler ──────────────────────────────────────────────────────────────────
 export async function POST(req: Request) {
   try {
     const { searchParams } = new URL(req.url)
-    const month = searchParams.get('month') // ex: 2024-01
+    const month = searchParams.get('month') // ex: 2025-01
+
     const token = await getSellsyToken()
 
     let dateStart: string | undefined
-    let dateEnd: string | undefined
+    let dateEnd:   string | undefined
 
     if (month) {
-      // Mode mois par mois : ex ?month=2024-01
       const [y, m] = month.split('-').map(Number)
       dateStart = `${y}-${String(m).padStart(2, '0')}-01`
       const lastDay = new Date(y, m, 0).getDate()
       dateEnd = `${y}-${String(m).padStart(2, '0')}-${lastDay}`
     } else {
-      // Cron quotidien : 3 derniers mois
+      // Incrémental quotidien : 3 derniers mois
       const d = new Date()
       d.setMonth(d.getMonth() - 3)
       dateStart = d.toISOString().slice(0, 10)
     }
 
+    // Un seul search paginé — classification par subject, pas d'appel par facture
     const invoices = await fetchAllPaidInvoices(token, dateStart, dateEnd)
-    const freshData = await aggregate(token, invoices)
 
-    // Toujours merger avec le cache existant
+    const caInvoices  = invoices.filter(inv => !isCaution(inv))
+    const cauInvoices = invoices.filter(inv =>  isCaution(inv))
+
+    const caMonthly  = mapToSorted(buildMonthMap(caInvoices))
+    const cauMonthly = mapToSorted(buildMonthMap(cauInvoices))
+
+    const freshData: CacheData = {
+      ca:      summarize(caMonthly),
+      caution: summarize(cauMonthly),
+      last_updated: new Date().toISOString(),
+    }
+
+    // Merge avec cache existant
     const existing = await readExistingCache()
-    const finalData = existing ? mergeIntoCache(existing, freshData) : freshData
+    let finalData: CacheData
+    if (existing) {
+      const mergedCa  = mergeMonthly(existing.ca.monthly,      caMonthly)
+      const mergedCau = mergeMonthly(existing.caution.monthly,  cauMonthly)
+      finalData = {
+        ca:      summarize(mergedCa),
+        caution: summarize(mergedCau),
+        last_updated: new Date().toISOString(),
+      }
+    } else {
+      finalData = freshData
+    }
 
     await saveToAirtable(finalData)
     await cleanOldCache()
 
     return NextResponse.json({
-      ok: true,
-      mode:          month ? `mois ${month}` : 'incremental (3 mois)',
+      ok:            true,
+      mode:          month ? `mois ${month}` : 'incrémental (3 mois)',
+      total_fetched: invoices.length,
+      ca_invoices:   caInvoices.length,
+      cau_invoices:  cauInvoices.length,
       ca_total:      Math.round(finalData.ca.total_ht),
       caution_total: Math.round(finalData.caution.total_ht),
-      nb_invoices:   invoices.length,
       last_updated:  finalData.last_updated,
     })
   } catch (e) {
