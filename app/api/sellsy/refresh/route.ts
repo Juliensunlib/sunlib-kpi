@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 
 export const dynamic = 'force-dynamic'
-export const maxDuration = 300
+export const maxDuration = 900
 
 const SELLSY_TOKEN_URL = 'https://login.sellsy.com/oauth2/access-tokens'
 const SELLSY_API       = 'https://api.sellsy.com/v2'
