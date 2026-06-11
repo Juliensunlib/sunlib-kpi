@@ -121,14 +121,13 @@ export async function GET(req: NextRequest) {
       const moisSig = str(f[F.MOIS_SIGNATURE])
       const etatF2  = str(f[F.ETAT_F2])
       const etatF3  = str(f[F.ETAT_F3])
-      const dureeF2 = num(f[F.DUREE_F2_J])
 
       if (isSigne(f) && moisSig) {
         ensure(moisSig).signes.push(r)
       }
 
       if (etatF2 === 'Validée') {
-        // Date réelle de pose = dernière modification de l'état F2 (quand il passe à Validée)
+        // Date réelle de pose = dernière modification de l'état F2
         const dateF2 = str(f[F.DATE_MODIF_F2])
         let moisPose = moisSig
         if (dateF2) {
@@ -147,7 +146,6 @@ export async function GET(req: NextRequest) {
       }
     }
 
-    // isPro basé sur le segment normalisé
     const isParticulier = (r: Rec) => {
       const seg = str(r.fields[F.SEGMENT])
       return seg === 'Solo' || seg === 'Duo'
@@ -169,6 +167,11 @@ export async function GET(req: NextRequest) {
         kwc_signes_part:      signes.filter(isParticulier).reduce((s, r) => s + num(r.fields[F.KWC]), 0),
         moy_abonnement:       avg(signes.map(r => num(r.fields[F.ABONNEMENT_KPI])).filter(v => v > 0)),
         moy_duree_contrat:    avg(signes.map(r => num(r.fields[F.DUREE_CONTRAT_KPI])).filter(v => v > 0)),
+        // ─── MRR souscrit (somme des abonnements HT) ─────────────────────────
+        mrr_signe:      signes.reduce((s, r) => s + num(r.fields[F.ABONNEMENT_KPI]), 0),
+        mrr_signe_pro:  signes.filter(isPro).reduce((s, r) => s + num(r.fields[F.ABONNEMENT_KPI]), 0),
+        mrr_signe_part: signes.filter(isParticulier).reduce((s, r) => s + num(r.fields[F.ABONNEMENT_KPI]), 0),
+        // ─────────────────────────────────────────────────────────────────────
         nb_poses:          poses.length,
         nb_poses_pro:      poses.filter(isPro).length,
         nb_poses_part:     poses.filter(isParticulier).length,
@@ -193,7 +196,6 @@ export async function GET(req: NextRequest) {
     const par_statut:       Record<string, number> = {}
 
     for (const r of allSignes) {
-      // ← Normalisation : Solo + Duo → Particulier dans par_segment
       const seg = normalizeSegment(str(r.fields[F.SEGMENT]))
       const ti  = str(r.fields[F.TYPE_INSTALLATION]) || 'Non défini'
       const st  = str(r.fields[F.STATUT_DOSSIER])    || 'Non défini'
@@ -215,6 +217,11 @@ export async function GET(req: NextRequest) {
         moy_duree_f2:       avg(allPoses.map(r => num(r.fields[F.DUREE_F2_J])).filter(v => v > 0)),
         mandats_signes:     allSignes.filter(r => bool(r.fields[F.MANDAT_SIGNE])).length,
         mandats_total:      allSignes.length,
+        // ─── MRR total ────────────────────────────────────────────────────────
+        total_mrr: allSignes.reduce((s, r) => s + num(r.fields[F.ABONNEMENT_KPI]), 0),
+        mrr_pro:   allSignes.filter(isPro).reduce((s, r) => s + num(r.fields[F.ABONNEMENT_KPI]), 0),
+        mrr_part:  allSignes.filter(isParticulier).reduce((s, r) => s + num(r.fields[F.ABONNEMENT_KPI]), 0),
+        // ─────────────────────────────────────────────────────────────────────
         par_segment, par_type_install, par_statut,
         capex_pro:  allSignes.filter(isPro).reduce((s, r) => s + num(r.fields[F.CAPEX_HT]), 0),
         capex_part: allSignes.filter(isParticulier).reduce((s, r) => s + num(r.fields[F.CAPEX_HT]), 0),
