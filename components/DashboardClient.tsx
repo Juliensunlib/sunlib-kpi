@@ -5,7 +5,7 @@ import Changelog from './Changelog'
 
 type Segment     = 'Tous' | 'Pro' | 'Particulier'
 type TypeInstall = 'Tous' | 'PV seul' | 'PV + Batterie' | 'PV + Batterie Virtuelle'
-type TabId       = 'signes' | 'poses' | 'capex_signes' | 'capex_poses' | 'kwc' | 'duree_f2'
+type TabId       = 'signes' | 'poses' | 'capex_signes' | 'capex_poses' | 'kwc' | 'duree_f2' | 'mrr'
 
 interface ChangeEntry {
   metric: string; old_val: number | null; new_val: number
@@ -18,6 +18,7 @@ interface KPIGlobal {
   total_kwc_poses: number; total_capex_poses: number
   moy_abonnement: number; moy_duree_contrat: number; moy_duree_f2: number
   mandats_signes: number; mandats_total: number
+  total_mrr: number; mrr_pro: number; mrr_part: number
   par_segment: Record<string, number>
   capex_pro: number; capex_part: number
   kwc_pro: number; kwc_part: number
@@ -38,18 +39,18 @@ const fmtEur = (v: number) =>
     maximumFractionDigits: 0, minimumFractionDigits: 0,
   }).format(v)
 
-function KPICard({ label, value, icon, sub, unit = '', decimals = 0, currency = false }: {
+function KPICard({ label, value, icon, sub, unit = '', decimals = 0, currency = false, highlight = false }: {
   label: string; value: number; icon?: string; sub?: string
-  unit?: string; decimals?: number; currency?: boolean
+  unit?: string; decimals?: number; currency?: boolean; highlight?: boolean
 }) {
   const display = currency ? fmtEur(value) : `${value.toFixed(decimals)}${unit}`
   return (
-    <div className="kpi-card">
+    <div className={`kpi-card ${highlight ? 'border-l-4 border-l-emerald-500' : ''}`}>
       <div className="flex items-start justify-between mb-1">
         <p className="kpi-label">{label}</p>
         {icon && <span className="text-base">{icon}</span>}
       </div>
-      <p className="kpi-value">{display}</p>
+      <p className={`kpi-value ${highlight ? 'text-emerald-600' : ''}`}>{display}</p>
       {sub && <p className="kpi-sub">{sub}</p>}
     </div>
   )
@@ -83,6 +84,7 @@ function StatBar({ title, data, total }: {
     </div>
   )
 }
+
 function SegmentBars({ g }: { g: KPIGlobal }) {
   const pro  = g.par_segment['Pro']  || 0
   const part = g.par_segment['Particulier'] || 0
@@ -112,27 +114,34 @@ function SegmentBars({ g }: { g: KPIGlobal }) {
       partVal: g.capex_part, partFmt: fmtEurK(g.capex_part),
       total: (g.capex_pro + g.capex_part) || 1,
     },
+    {
+      label: 'MRR souscrit HT',
+      proVal: g.mrr_pro,   proFmt: fmtEurK(g.mrr_pro),
+      partVal: g.mrr_part, partFmt: fmtEurK(g.mrr_part),
+      total: (g.mrr_pro + g.mrr_part) || 1,
+      emerald: true,
+    },
   ]
 
   return (
     <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-4">
       <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-4">Répartition segment</h3>
       <div className="space-y-4">
-        {rows.map(({ label, proVal, proFmt, partVal, partFmt, total }) => {
+        {rows.map(({ label, proVal, proFmt, partVal, partFmt, total, emerald }) => {
           const pctPro  = Math.round(proVal  / total * 100)
           const pctPart = Math.round(partVal / total * 100)
+          const proColor  = emerald ? 'bg-emerald-600' : 'bg-blue-500'
+          const partColor = emerald ? 'bg-emerald-300' : 'bg-amber-400'
           return (
             <div key={label}>
-              <p className="text-xs text-gray-500 mb-1.5">{label}</p>
-              {/* Barre segmentée */}
+              <p className={`text-xs mb-1.5 ${emerald ? 'text-emerald-600 font-semibold' : 'text-gray-500'}`}>{label}</p>
               <div className="flex h-2 rounded-full overflow-hidden mb-1.5">
-                <div className="bg-blue-500 transition-all" style={{ width: `${pctPro}%` }} />
-                <div className="bg-amber-400 transition-all" style={{ width: `${pctPart}%` }} />
+                <div className={`${proColor} transition-all`} style={{ width: `${pctPro}%` }} />
+                <div className={`${partColor} transition-all`} style={{ width: `${pctPart}%` }} />
               </div>
-              {/* Légende */}
               <div className="flex justify-between text-xs">
                 <div className="flex items-center gap-1.5">
-                  <span className="w-2 h-2 rounded-sm bg-blue-500 inline-block" />
+                  <span className={`w-2 h-2 rounded-sm ${proColor} inline-block`} />
                   <span className="text-gray-600">Pro</span>
                   <span className="font-semibold text-gray-800">{proFmt}</span>
                   <span className="text-gray-400">({pctPro}%)</span>
@@ -141,7 +150,7 @@ function SegmentBars({ g }: { g: KPIGlobal }) {
                   <span className="text-gray-400">({pctPart}%)</span>
                   <span className="font-semibold text-gray-800">{partFmt}</span>
                   <span className="text-gray-600">Part.</span>
-                  <span className="w-2 h-2 rounded-sm bg-amber-400 inline-block" />
+                  <span className={`w-2 h-2 rounded-sm ${partColor} inline-block`} />
                 </div>
               </div>
             </div>
@@ -230,6 +239,7 @@ export default function DashboardClient() {
     { id: 'capex_poses',  label: '💰 CAPEX posé' },
     { id: 'kwc',          label: '⚡ kWc' },
     { id: 'duree_f2',     label: '⏱️ Durée F2' },
+    { id: 'mrr',          label: '📈 MRR' },
   ]
 
   const g       = data?.global
@@ -325,6 +335,7 @@ export default function DashboardClient() {
 
         {!loading && !error && g && (
           <>
+            {/* Ligne 1 — KPIs opérationnels */}
             <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-3">
               <KPICard label="Contrats signés"  value={g.total_signes}     icon="📝" />
               <KPICard label="Poses réalisées"   value={g.total_poses}      icon="🔧"
@@ -334,21 +345,32 @@ export default function DashboardClient() {
                 sub={`${Math.round(g.mandats_signes / Math.max(g.mandats_total, 1) * 100)}% signés`} />
             </div>
 
+            {/* Ligne 2 — KPIs financiers + MRR mis en avant */}
             <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-5">
               <KPICard label="CAPEX signé"   value={g.total_capex_signes} icon="💶" currency />
               <KPICard label="CAPEX posé"    value={g.total_capex_poses}  icon="💰" currency />
               <KPICard label="Abo. moyen"    value={g.moy_abonnement}     icon="📊" currency />
-              <KPICard label="Durée moy. F2" value={g.moy_duree_f2}       unit=" j" icon="⏱️"
-                sub="Sig. → Pose validée" decimals={1} />
+              {/* ─── MRR mis en avant ──────────────────────────────────────── */}
+              <KPICard
+                label="MRR souscrit HT"
+                value={g.total_mrr}
+                icon="📈"
+                currency
+                highlight
+                sub={`${Math.round(g.total_mrr * 12 / 1000)}k€/an · abonnements signés`}
+              />
             </div>
 
+            {/* Graphique mensuel */}
             <div className="bg-white rounded-xl border border-gray-100 shadow-sm mb-4">
               <div className="border-b border-gray-100 flex overflow-x-auto">
                 {tabs.map(t => (
                   <button key={t.id} onClick={() => setTab(t.id)}
                     className={`px-4 py-3 text-sm font-medium border-b-2 whitespace-nowrap transition-colors ${
                       tab === t.id
-                        ? 'border-amber-500 text-amber-600'
+                        ? t.id === 'mrr'
+                          ? 'border-emerald-500 text-emerald-600'
+                          : 'border-amber-500 text-amber-600'
                         : 'border-transparent text-gray-500 hover:text-gray-700'
                     }`}>
                     {t.label}
@@ -363,6 +385,7 @@ export default function DashboardClient() {
               </div>
             </div>
 
+            {/* Répartitions */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <SegmentBars g={g} />
               <StatBar title="Type d'installation"  data={g.par_type_install} total={g.total_signes} />
