@@ -67,6 +67,31 @@ async function fetchAllPaidInvoices(token: string): Promise<SellsyInvoice[]> {
   return all
 }
 
+// ─── Fetch détail d'une facture pour lire les lignes ─────────────────────────
+interface InvoiceRow {
+  type: string
+  reference?: string
+}
+
+async function fetchInvoiceRows(token: string, id: number): Promise<InvoiceRow[]> {
+  try {
+    const res = await fetch(`${SELLSY_API}/invoices/${id}`, {
+      headers: { Authorization: `Bearer ${token}` },
+    })
+    if (!res.ok) return []
+    const d = await res.json() as { rows?: InvoiceRow[] }
+    return d.rows || []
+  } catch {
+    return []
+  }
+}
+
+// Détecte si une facture est une caution via ses lignes (référence commence par CAU)
+async function isCaution(token: string, id: number): Promise<boolean> {
+  const rows = await fetchInvoiceRows(token, id)
+  return rows.some(r => (r.reference || '').toUpperCase().startsWith('CAU'))
+}
+
 // ─── Agrégation par mois ──────────────────────────────────────────────────────
 function monthLabel(ym: string): string {
   const [y, m] = ym.split('-')
@@ -88,25 +113,30 @@ interface CacheData {
   last_updated: string
 }
 
-function aggregate(invoices: SellsyInvoice[]): CacheData {
+async function aggregate(token: string, invoices: SellsyInvoice[]): Promise<CacheData> {
   const caMap  = new Map<string, MonthData>()
   const cauMap = new Map<string, MonthData>()
 
-  for (const inv of invoices) {
-    const subj = (inv.subject || '').toLowerCase()
-    const isGarantie = subj.includes('dépôt de garantie')
-      || subj.includes('depot de garantie')
-      || subj.includes('dépot de garantie')
-    const mois = inv.date.slice(0, 7)
-    const ht   = parseFloat(inv.amounts?.total_excl_tax || '0') || 0
-    const map  = isGarantie ? cauMap : caMap
+  // Fetch détails en batches de 10 appels parallèles
+  const BATCH = 10
+  for (let i = 0; i < invoices.length; i += BATCH) {
+    const batch = invoices.slice(i, i + BATCH)
+    const results = await Promise.all(
+      batch.map(inv => isCaution(token, inv.id).then(cau => ({ inv, cau })))
+    )
 
-    if (!map.has(mois)) {
-      map.set(mois, { month: mois, label: monthLabel(mois), nb: 0, total_ht: 0 })
+    for (const { inv, cau } of results) {
+      const mois = inv.date.slice(0, 7)
+      const ht   = parseFloat(inv.amounts?.total_excl_tax || '0') || 0
+      const map  = cau ? cauMap : caMap
+
+      if (!map.has(mois)) {
+        map.set(mois, { month: mois, label: monthLabel(mois), nb: 0, total_ht: 0 })
+      }
+      const row = map.get(mois)!
+      row.nb       += 1
+      row.total_ht += ht
     }
-    const row = map.get(mois)!
-    row.nb       += 1
-    row.total_ht += ht
   }
 
   const sortDesc = (a: MonthData, b: MonthData) => b.month.localeCompare(a.month)
@@ -173,7 +203,7 @@ export async function POST() {
   try {
     const token    = await getSellsyToken()
     const invoices = await fetchAllPaidInvoices(token)
-    const data     = aggregate(invoices)
+    const data     = await aggregate(token, invoices)
     await saveToAirtable(data)
     await cleanOldCache()
 
