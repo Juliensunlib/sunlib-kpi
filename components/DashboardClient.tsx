@@ -1,220 +1,415 @@
 'use client'
-import {
-  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip,
-  Legend, ResponsiveContainer, Cell
-} from 'recharts'
+import { useState, useEffect, useCallback } from 'react'
+import MonthlyChart from './MonthlyChart'
+import Changelog from './Changelog'
 
-type TabId = 'signes' | 'poses' | 'capex_signes' | 'capex_poses' | 'kwc' | 'duree_f2' | 'mrr'
+type Segment     = 'Tous' | 'Pro' | 'Particulier'
+type TypeInstall = 'Tous' | 'PV seul' | 'PV + Batterie' | 'PV + Batterie Virtuelle'
+type TabId       = 'signes' | 'poses' | 'capex_signes' | 'capex_poses' | 'kwc' | 'duree_f2' | 'mrr'
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-type MonthRow = Record<string, any>
+interface ChangeEntry {
+  metric: string; old_val: number | null; new_val: number
+  delta: number; delta_pct: number | null; context?: string
+}
 
-const PRO_COLOR  = '#3b82f6'  // bleu
-const PART_COLOR = '#f59e0b'  // amber
-const TOT_COLOR  = '#6366f1'  // indigo (quand filtre actif)
-const MRR_COLOR  = '#10b981'  // emerald
+interface KPIGlobal {
+  total_signes: number; total_kwc_signes: number
+  total_capex_signes: number; total_poses: number
+  total_kwc_poses: number; total_capex_poses: number
+  moy_abonnement: number; moy_duree_contrat: number; moy_duree_f2: number
+  mandats_signes: number; mandats_total: number
+  total_mrr: number; mrr_pro: number; mrr_part: number
+  par_segment: Record<string, number>
+  capex_pro: number; capex_part: number
+  kwc_pro: number; kwc_part: number
+  par_type_install: Record<string, number>
+  par_statut: Record<string, number>
+}
+
+interface KPIData {
+  global: KPIGlobal
+  monthly: unknown[]
+  total_records: number
+  last_updated: string
+}
 
 const fmtEur = (v: number) =>
-  v >= 1_000_000
-    ? `${(v / 1_000_000).toFixed(2)} M€`
-    : v >= 1_000
-      ? `${Math.round(v / 1_000)}k€`
-      : `${Math.round(v)}€`
+  new Intl.NumberFormat('fr-FR', {
+    style: 'currency', currency: 'EUR',
+    maximumFractionDigits: 0, minimumFractionDigits: 0,
+  }).format(v)
 
-// Tooltip personnalisé
-function CustomTooltip({ active, payload, label, metric }: {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  active?: boolean; payload?: any[]; label?: string; metric: TabId
+function KPICard({ label, value, icon, sub, unit = '', decimals = 0, currency = false, highlight = false }: {
+  label: string; value: number; icon?: string; sub?: string
+  unit?: string; decimals?: number; currency?: boolean; highlight?: boolean
 }) {
-  if (!active || !payload?.length) return null
-  const isEur = metric === 'capex_signes' || metric === 'capex_poses' || metric === 'mrr'
-  const isKwc = metric === 'kwc'
-  const isF2  = metric === 'duree_f2'
-
-  const fmt = (v: number) =>
-    isEur ? fmtEur(v) : isKwc ? `${v.toFixed(1)} kWc` : isF2 ? `${v.toFixed(0)} j` : String(v)
-
+  const display = currency ? fmtEur(value) : `${value.toFixed(decimals)}${unit}`
   return (
-    <div className="bg-white border border-gray-200 rounded-lg shadow-lg p-3 text-sm">
-      <p className="font-semibold text-gray-700 mb-1.5">{label}</p>
-      {[...payload].reverse().map((p, i) => (
-        <div key={i} className="flex items-center gap-2 mb-0.5">
-          <span className="w-2.5 h-2.5 rounded-sm flex-shrink-0" style={{ background: p.fill || p.color }} />
-          <span className="text-gray-600">{p.name} :</span>
-          <span className="font-semibold text-gray-800">{fmt(p.value)}</span>
-        </div>
-      ))}
-      {payload.length > 1 && (
-        <div className="flex items-center gap-2 mt-1 pt-1 border-t border-gray-100">
-          <span className="w-2.5 h-2.5 rounded-sm flex-shrink-0 bg-gray-300" />
-          <span className="text-gray-500">Total :</span>
-          <span className="font-semibold text-gray-700">
-            {fmt(payload.reduce((s, p) => s + (p.value || 0), 0))}
-          </span>
-        </div>
-      )}
+    <div className={`kpi-card ${highlight ? 'border-l-4 border-l-emerald-500' : ''}`}>
+      <div className="flex items-start justify-between mb-1">
+        <p className="kpi-label">{label}</p>
+        {icon && <span className="text-base">{icon}</span>}
+      </div>
+      <p className={`kpi-value ${highlight ? 'text-emerald-600' : ''}`}>{display}</p>
+      {sub && <p className="kpi-sub">{sub}</p>}
     </div>
   )
 }
 
-interface Props {
-  data: MonthRow[]
-  metric: TabId
-  showSegments: boolean
+function StatBar({ title, data, total }: {
+  title: string; data: Record<string, number>; total: number
+}) {
+  const sorted = Object.entries(data).sort((a, b) => b[1] - a[1]).slice(0, 8)
+  return (
+    <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-4">
+      <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">{title}</h3>
+      <div className="space-y-2">
+        {sorted.map(([k, v]) => (
+          <div key={k}>
+            <div className="flex justify-between text-sm mb-0.5">
+              <span className="text-gray-700 truncate pr-2">{k || '—'}</span>
+              <span className="font-medium text-gray-900 flex-shrink-0">
+                {v} <span className="text-gray-400 font-normal text-xs">
+                  ({Math.round(v / Math.max(total, 1) * 100)}%)
+                </span>
+              </span>
+            </div>
+            <div className="h-1.5 bg-gray-100 rounded-full">
+              <div className="h-1.5 bg-amber-400 rounded-full"
+                style={{ width: `${Math.round(v / Math.max(total, 1) * 100)}%` }} />
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
 }
 
-// Mapping métrique → champs de données
-const METRIC_CONFIG: Record<TabId, {
-  proKey: string; partKey: string; totalKey: string
-  label: string; stacked: boolean; proColor?: string; partColor?: string; totColor?: string
-}> = {
-  signes: {
-    proKey: 'nb_signes_pro', partKey: 'nb_signes_part', totalKey: 'nb_signes',
-    label: 'Contrats signés', stacked: true,
-  },
-  poses: {
-    proKey: 'nb_poses_pro', partKey: 'nb_poses_part', totalKey: 'nb_poses',
-    label: 'Poses réalisées', stacked: true,
-  },
-  capex_signes: {
-    proKey: 'capex_ht_signes_pro', partKey: 'capex_ht_signes_part', totalKey: 'capex_ht_signes',
-    label: 'CAPEX signé HT', stacked: true,
-  },
-  capex_poses: {
-    proKey: 'capex_ht_poses_pro', partKey: 'capex_ht_poses_part', totalKey: 'capex_ht_poses',
-    label: 'CAPEX posé HT', stacked: true,
-  },
-  kwc: {
-    proKey: 'kwc_signes_pro', partKey: 'kwc_signes_part', totalKey: 'kwc_signes',
-    label: 'kWc signés', stacked: true,
-  },
-  duree_f2: {
-    proKey: 'moy_duree_f2_pro', partKey: 'moy_duree_f2_part', totalKey: 'moy_duree_f2',
-    label: 'Durée moy. F2 (j)', stacked: false,
-  },
-  mrr: {
-    proKey: 'mrr_signe_pro', partKey: 'mrr_signe_part', totalKey: 'mrr_signe',
-    label: 'MRR souscrit HT (€/mois)', stacked: true,
-    proColor: '#059669', partColor: '#34d399', totColor: MRR_COLOR,
-  },
-}
+function SegmentBars({ g }: { g: KPIGlobal }) {
+  const pro  = g.par_segment['Pro']  || 0
+  const part = g.par_segment['Particulier'] || 0
+  const total = pro + part || 1
 
-// Formateur axe Y
-function yFormatter(metric: TabId) {
-  if (metric === 'capex_signes' || metric === 'capex_poses' || metric === 'mrr') return (v: number) => fmtEur(v)
-  if (metric === 'kwc') return (v: number) => `${v.toFixed(0)}`
-  if (metric === 'duree_f2') return (v: number) => `${v}j`
-  return (v: number) => String(v)
-}
+  const fmtEurK = (v: number) =>
+    v >= 1_000_000
+      ? new Intl.NumberFormat('fr-FR', { maximumFractionDigits: 0 }).format(v) + ' €'
+      : v >= 1_000 ? `${Math.round(v / 1_000)}k€` : `${Math.round(v)}€`
 
-export default function MonthlyChart({ data, metric, showSegments }: Props) {
-  if (!data.length) return <p className="text-center text-gray-400 py-16">Aucune donnée</p>
-
-  const cfg = METRIC_CONFIG[metric]
-  const isStacked = cfg.stacked && showSegments
-
-  const proColor  = cfg.proColor  || PRO_COLOR
-  const partColor = cfg.partColor || PART_COLOR
-  const totColor  = cfg.totColor  || TOT_COLOR
-
-  const chartData = data.map(d => ({
-    ...d,
-    label: d.label,
-    _pro:   d[cfg.proKey]   || 0,
-    _part:  d[cfg.partKey]  || 0,
-    _total: d[cfg.totalKey] || 0,
-  }))
-
-  const yFmt = yFormatter(metric)
+  const rows = [
+    {
+      label: 'Contrats signés',
+      proVal: pro,   proFmt: String(pro),
+      partVal: part, partFmt: String(part),
+      total,
+      proColor: 'bg-blue-500', partColor: 'bg-amber-400', labelColor: 'text-gray-500',
+    },
+    {
+      label: 'kWc signés',
+      proVal: g.kwc_pro,   proFmt: `${g.kwc_pro.toFixed(1)} kWc`,
+      partVal: g.kwc_part, partFmt: `${g.kwc_part.toFixed(1)} kWc`,
+      total: (g.kwc_pro + g.kwc_part) || 1,
+      proColor: 'bg-blue-500', partColor: 'bg-amber-400', labelColor: 'text-gray-500',
+    },
+    {
+      label: 'CAPEX signé HT',
+      proVal: g.capex_pro,   proFmt: fmtEurK(g.capex_pro),
+      partVal: g.capex_part, partFmt: fmtEurK(g.capex_part),
+      total: (g.capex_pro + g.capex_part) || 1,
+      proColor: 'bg-blue-500', partColor: 'bg-amber-400', labelColor: 'text-gray-500',
+    },
+    {
+      label: 'MRR souscrit HT',
+      proVal: g.mrr_pro,   proFmt: fmtEurK(g.mrr_pro),
+      partVal: g.mrr_part, partFmt: fmtEurK(g.mrr_part),
+      total: (g.mrr_pro + g.mrr_part) || 1,
+      proColor: 'bg-emerald-600', partColor: 'bg-emerald-300', labelColor: 'text-emerald-600 font-semibold',
+    },
+  ]
 
   return (
-    <div className="w-full">
-      {/* Badge MRR si tab actif */}
-      {metric === 'mrr' && (
-        <div className="mb-3 flex items-center gap-2">
-          <span className="inline-flex items-center gap-1.5 bg-emerald-50 text-emerald-700 text-xs font-semibold px-3 py-1 rounded-full border border-emerald-200">
-            <span className="w-2 h-2 rounded-full bg-emerald-500 inline-block" />
-            MRR souscrit — Abonnements HT signés par mois de signature
-          </span>
-        </div>
-      )}
+    <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-4">
+      <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-4">Répartition segment</h3>
+      <div className="space-y-4">
+        {rows.map(({ label, proVal, proFmt, partVal, partFmt, total, proColor, partColor, labelColor }) => {
+          const pctPro  = Math.round(proVal  / total * 100)
+          const pctPart = Math.round(partVal / total * 100)
+          return (
+            <div key={label}>
+              <p className={`text-xs mb-1.5 ${labelColor}`}>{label}</p>
+              <div className="flex h-2 rounded-full overflow-hidden mb-1.5">
+                <div className={`${proColor} transition-all`} style={{ width: `${pctPro}%` }} />
+                <div className={`${partColor} transition-all`} style={{ width: `${pctPart}%` }} />
+              </div>
+              <div className="flex justify-between text-xs">
+                <div className="flex items-center gap-1.5">
+                  <span className={`w-2 h-2 rounded-sm ${proColor} inline-block`} />
+                  <span className="text-gray-600">Pro</span>
+                  <span className="font-semibold text-gray-800">{proFmt}</span>
+                  <span className="text-gray-400">({pctPro}%)</span>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <span className="text-gray-400">({pctPart}%)</span>
+                  <span className="font-semibold text-gray-800">{partFmt}</span>
+                  <span className="text-gray-600">Part.</span>
+                  <span className={`w-2 h-2 rounded-sm ${partColor} inline-block`} />
+                </div>
+              </div>
+            </div>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
 
-      <ResponsiveContainer width="100%" height={280}>
-        <BarChart
-          data={chartData}
-          margin={{ top: 4, right: 16, left: 8, bottom: 4 }}
-          barCategoryGap="25%"
-          barGap={2}
-        >
-          <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" vertical={false} />
-          <XAxis
-            dataKey="label"
-            tick={{ fontSize: 11, fill: '#9ca3af' }}
-            axisLine={false}
-            tickLine={false}
-          />
-          <YAxis
-            tickFormatter={yFmt}
-            tick={{ fontSize: 11, fill: '#9ca3af' }}
-            axisLine={false}
-            tickLine={false}
-            width={metric === 'capex_signes' || metric === 'capex_poses' || metric === 'mrr' ? 60 : 40}
-          />
-          <Tooltip content={<CustomTooltip metric={metric} />} cursor={{ fill: '#f8fafc' }} />
-          {showSegments && (
-            <Legend
-              formatter={(value) => (
-                <span className="text-xs text-gray-600">{value}</span>
+export default function DashboardClient() {
+  const [data, setData]               = useState<KPIData | null>(null)
+  const [loading, setLoading]         = useState(true)
+  const [error, setError]             = useState<string | null>(null)
+  const [segment, setSegment]         = useState<Segment>('Tous')
+  const [typeInstall, setTypeInstall] = useState<TypeInstall>('Tous')
+  const [annee, setAnnee]             = useState('')
+  const [tab, setTab]                 = useState<TabId>('signes')
+  const [showLog, setShowLog]         = useState(false)
+  const [log, setLog]                 = useState<Array<{ date: string; entries: ChangeEntry[] }>>([])
+  const [refreshing, setRefreshing]   = useState(false)
+
+  const [lastRead, setLastRead] = useState<string>(() => {
+    if (typeof window !== 'undefined') {
+      return localStorage.getItem('kpi_last_read') || ''
+    }
+    return ''
+  })
+
+  const unreadCount = log.filter(e => e.date > lastRead).length
+
+  function markAsRead() {
+    const now = new Date().toISOString()
+    localStorage.setItem('kpi_last_read', now)
+    setLastRead(now)
+  }
+
+  const load = useCallback(async (seg: Segment, ti: TypeInstall, yr: string) => {
+    setLoading(true); setError(null)
+    try {
+      const params = new URLSearchParams({ segment: seg, typeInstall: ti })
+      if (yr) params.set('annee', yr)
+      const res  = await fetch(`/api/kpis?${params}`)
+      const json = await res.json()
+      if (json.error) throw new Error(json.error)
+      setData(json)
+    } catch (e) { setError(String(e)) }
+    setLoading(false)
+  }, [])
+
+  useEffect(() => { load('Tous', 'Tous', '') }, [load])
+
+  useEffect(() => {
+    fetch('/api/snapshot')
+      .then(r => r.json())
+      .then(j => setLog(j.changelog ?? []))
+      .catch(() => {})
+  }, [])
+
+  function applyFilter(s: Segment, ti: TypeInstall, yr: string) {
+    setSegment(s); setTypeInstall(ti); setAnnee(yr)
+    load(s, ti, yr)
+  }
+
+  async function snapshot() {
+    setRefreshing(true)
+    try {
+      await fetch('/api/snapshot', { method: 'POST' })
+      const res  = await fetch('/api/snapshot')
+      const json = await res.json()
+      setLog(json.changelog ?? [])
+      alert('Snapshot créé ✓')
+    } catch { alert('Erreur snapshot') }
+    setRefreshing(false)
+  }
+
+  async function logout() {
+    await fetch('/api/auth', { method: 'DELETE' })
+    window.location.href = '/login'
+  }
+
+  const tabs: { id: TabId; label: string }[] = [
+    { id: 'signes',       label: '📝 Contrats signés' },
+    { id: 'poses',        label: '🔧 Poses (F2)' },
+    { id: 'capex_signes', label: '💶 CAPEX signé' },
+    { id: 'capex_poses',  label: '💰 CAPEX posé' },
+    { id: 'kwc',          label: '⚡ kWc' },
+    { id: 'duree_f2',     label: '⏱️ Durée F2' },
+    { id: 'mrr',          label: '📈 MRR' },
+  ]
+
+  const g       = data?.global
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const monthly = (data?.monthly || []) as any[]
+
+  return (
+    <div className="min-h-screen bg-gray-50">
+      <header className="bg-white border-b border-gray-200 sticky top-0 z-10">
+        <div className="max-w-screen-2xl mx-auto px-4 py-3 flex items-center gap-3 flex-wrap">
+          <div className="flex items-center gap-2 mr-2">
+            <div className="w-7 h-7 bg-amber-500 rounded-lg flex items-center justify-center flex-shrink-0">
+              <svg viewBox="0 0 24 24" fill="white" className="w-4 h-4">
+                <path d="M12 2a1 1 0 011 1v2a1 1 0 01-2 0V3a1 1 0 011-1zm0 16a1 1 0 011 1v2a1 1 0 01-2 0v-2a1 1 0 011-1zm10-8a1 1 0 010 2h-2a1 1 0 010-2h2zM4 12a1 1 0 010 2H2a1 1 0 010-2h2zM12 7a5 5 0 110 10A5 5 0 0112 7z"/>
+              </svg>
+            </div>
+            <span className="font-semibold text-gray-900 text-sm">SunLib KPIs</span>
+          </div>
+
+          <div className="flex items-center gap-2 flex-1 flex-wrap">
+            <select value={segment}
+              onChange={e => applyFilter(e.target.value as Segment, typeInstall, annee)}
+              className="text-sm border border-gray-200 rounded-lg px-3 py-1.5 bg-white">
+              <option value="Tous">Tous segments</option>
+              <option value="Pro">Pro</option>
+              <option value="Particulier">Particulier</option>
+            </select>
+            <select value={typeInstall}
+              onChange={e => applyFilter(segment, e.target.value as TypeInstall, annee)}
+              className="text-sm border border-gray-200 rounded-lg px-3 py-1.5 bg-white">
+              <option value="Tous">Toutes installations</option>
+              <option value="PV seul">PV seul</option>
+              <option value="PV + Batterie">PV + Batterie</option>
+              <option value="PV + Batterie Virtuelle">PV + Batterie Virtuelle</option>
+            </select>
+            <select value={annee}
+              onChange={e => applyFilter(segment, typeInstall, e.target.value)}
+              className="text-sm border border-gray-200 rounded-lg px-3 py-1.5 bg-white">
+              <option value="">Toutes années</option>
+              <option value="2024">2024</option>
+              <option value="2025">2025</option>
+              <option value="2026">2026</option>
+            </select>
+          </div>
+
+          <div className="flex items-center gap-2">
+            {data && (
+              <span className="text-xs text-gray-400 hidden sm:block">
+                {data.total_records} records · {new Date(data.last_updated).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}
+              </span>
+            )}
+            <button onClick={() => setShowLog(!showLog)}
+              className="relative text-sm px-3 py-1.5 border border-gray-200 rounded-lg hover:bg-gray-50">
+              📋 Journal
+              {unreadCount > 0 && (
+                <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs w-4 h-4 rounded-full flex items-center justify-center font-bold">
+                  {Math.min(unreadCount, 9)}
+                </span>
               )}
-            />
-          )}
+            </button>
+            <button onClick={snapshot} disabled={refreshing}
+              className="text-sm px-3 py-1.5 border border-gray-200 rounded-lg hover:bg-gray-50 disabled:opacity-50">
+              {refreshing ? '⏳' : '📸'} Snapshot
+            </button>
+            <a href="/commercial"
+              className="text-sm px-3 py-1.5 bg-blue-50 border border-blue-200 rounded-lg hover:bg-blue-100 text-blue-700 font-medium">
+              👥 Commercial
+            </a>
+            <button onClick={logout}
+              className="text-sm px-3 py-1.5 text-gray-500 hover:text-gray-700">
+              Déco
+            </button>
+          </div>
+        </div>
+      </header>
 
-          {showSegments ? (
-            <>
-              <Bar
-                dataKey="_pro"
-                name="Pro"
-                fill={proColor}
-                stackId={isStacked ? 'stack' : undefined}
-                radius={isStacked ? [0, 0, 0, 0] : [3, 3, 0, 0]}
-                maxBarSize={40}
-              />
-              <Bar
-                dataKey="_part"
-                name="Particulier"
-                fill={partColor}
-                stackId={isStacked ? 'stack' : undefined}
-                radius={isStacked ? [3, 3, 0, 0] : [3, 3, 0, 0]}
-                maxBarSize={40}
-              />
-            </>
-          ) : (
-            <Bar
-              dataKey="_total"
-              name={cfg.label}
-              fill={totColor}
-              radius={[3, 3, 0, 0]}
-              maxBarSize={40}
-            >
-              {chartData.map((_, i) => (
-                <Cell key={i} fill={totColor} opacity={0.85 + (i % 2) * 0.15} />
-              ))}
-            </Bar>
-          )}
-        </BarChart>
-      </ResponsiveContainer>
+      <main className="max-w-screen-2xl mx-auto px-4 py-5">
+        {loading && (
+          <div className="flex items-center justify-center py-24">
+            <div className="text-center">
+              <div className="w-8 h-8 border-2 border-amber-500 border-t-transparent rounded-full animate-spin mx-auto mb-3" />
+              <p className="text-sm text-gray-500">Chargement des données Airtable…</p>
+            </div>
+          </div>
+        )}
 
-      {/* Légende Pro/Part */}
-      {showSegments && (
-        <div className="flex items-center justify-center gap-6 mt-1 text-xs text-gray-500">
-          <span className="flex items-center gap-1.5">
-            <span className="w-3 h-3 rounded-sm inline-block" style={{ background: proColor }} />
-            Pro
-          </span>
-          <span className="flex items-center gap-1.5">
-            <span className="w-3 h-3 rounded-sm inline-block" style={{ background: partColor } } />
-            Particulier
-          </span>
+        {error && (
+          <div className="bg-red-50 border border-red-200 rounded-xl p-5 mb-5">
+            <p className="font-semibold text-red-800 mb-1">Erreur de chargement</p>
+            <pre className="text-sm text-red-700 whitespace-pre-wrap break-all">{error}</pre>
+          </div>
+        )}
+
+        {!loading && !error && g && (
+          <>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-3">
+              <KPICard label="Contrats signés"  value={g.total_signes}     icon="📝" />
+              <KPICard label="Poses réalisées"   value={g.total_poses}      icon="🔧"
+                sub={`${Math.round(g.total_poses / Math.max(g.total_signes, 1) * 100)}% taux pose`} />
+              <KPICard label="kWc signés"        value={g.total_kwc_signes} unit=" kWc" icon="⚡" decimals={2} />
+              <KPICard label="Mandats SEPA"      value={g.mandats_signes}   unit={`/${g.mandats_total}`} icon="🏦"
+                sub={`${Math.round(g.mandats_signes / Math.max(g.mandats_total, 1) * 100)}% signés`} />
+            </div>
+
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-5">
+              <KPICard label="CAPEX signé"      value={g.total_capex_signes} icon="💶" currency />
+              <KPICard label="CAPEX posé"       value={g.total_capex_poses}  icon="💰" currency />
+              <KPICard label="Abo. moyen"       value={g.moy_abonnement}     icon="📊" currency />
+              <KPICard label="MRR souscrit HT"  value={g.total_mrr}          icon="📈" currency highlight
+                sub={`${Math.round(g.total_mrr * 12 / 1000)}k€/an`} />
+            </div>
+
+            <div className="bg-white rounded-xl border border-gray-100 shadow-sm mb-4">
+              <div className="border-b border-gray-100 flex overflow-x-auto">
+                {tabs.map(t => (
+                  <button key={t.id} onClick={() => setTab(t.id)}
+                    className={`px-4 py-3 text-sm font-medium border-b-2 whitespace-nowrap transition-colors ${
+                      tab === t.id
+                        ? t.id === 'mrr' ? 'border-emerald-500 text-emerald-600' : 'border-amber-500 text-amber-600'
+                        : 'border-transparent text-gray-500 hover:text-gray-700'
+                    }`}>
+                    {t.label}
+                  </button>
+                ))}
+              </div>
+              <div className="p-5">
+                {monthly.length > 0
+                  ? <MonthlyChart data={monthly} metric={tab} showSegments={segment === 'Tous'} />
+                  : <p className="text-center text-gray-400 py-16">Aucune donnée pour ces filtres</p>
+                }
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <SegmentBars g={g} />
+              <StatBar title="Type d'installation"  data={g.par_type_install} total={g.total_signes} />
+              <StatBar title="Statut dossiers"
+                data={g.par_statut}
+                total={Object.values(g.par_statut).reduce((a, b) => a + b, 0)} />
+            </div>
+          </>
+        )}
+      </main>
+
+      {showLog && (
+        <div className="fixed inset-y-0 right-0 w-96 max-w-full bg-white border-l border-gray-200 shadow-xl z-20 flex flex-col">
+          <div className="flex items-center justify-between p-4 border-b">
+            <div className="flex items-center gap-2">
+              <h2 className="font-semibold text-gray-900">Journal</h2>
+              {unreadCount > 0 && (
+                <span className="bg-red-500 text-white text-xs px-1.5 py-0.5 rounded-full font-bold">
+                  {unreadCount} non lu{unreadCount > 1 ? 's' : ''}
+                </span>
+              )}
+            </div>
+            <div className="flex items-center gap-2">
+              {unreadCount > 0 && (
+                <button onClick={markAsRead}
+                  className="text-xs text-amber-600 hover:text-amber-800 font-medium px-2 py-1 bg-amber-50 hover:bg-amber-100 rounded-lg transition-colors">
+                  ✓ Marquer comme lu
+                </button>
+              )}
+              <button onClick={() => setShowLog(false)}
+                className="text-gray-400 hover:text-gray-600 text-xl leading-none">✕</button>
+            </div>
+          </div>
+          <div className="flex-1 overflow-y-auto">
+            <Changelog entries={log} lastRead={lastRead} />
+          </div>
         </div>
       )}
     </div>
