@@ -33,11 +33,29 @@ interface KPIData {
   last_updated: string
 }
 
+interface SellsyMonthData {
+  month: string; label: string; nb: number; total_ht: number
+}
+
+interface SellsyData {
+  ca:      { monthly: SellsyMonthData[]; total_ht: number; nb: number }
+  caution: { monthly: SellsyMonthData[]; total_ht: number; nb: number }
+  last_updated: string
+  cache_date: string
+}
+
 const fmtEur = (v: number) =>
   new Intl.NumberFormat('fr-FR', {
     style: 'currency', currency: 'EUR',
     maximumFractionDigits: 0, minimumFractionDigits: 0,
   }).format(v)
+
+const fmtEurK = (v: number) =>
+  v >= 1_000_000
+    ? `${(v / 1_000_000).toFixed(2)} M€`
+    : v >= 1_000
+      ? `${(v / 1_000).toFixed(1)}k€`
+      : `${Math.round(v)}€`
 
 function KPICard({ label, value, icon, sub, unit = '', decimals = 0, currency = false, highlight = false }: {
   label: string; value: number; icon?: string; sub?: string
@@ -89,11 +107,6 @@ function SegmentBars({ g }: { g: KPIGlobal }) {
   const pro  = g.par_segment['Pro']  || 0
   const part = g.par_segment['Particulier'] || 0
   const total = pro + part || 1
-
-  const fmtEurK = (v: number) =>
-    v >= 1_000_000
-      ? new Intl.NumberFormat('fr-FR', { maximumFractionDigits: 0 }).format(v) + ' €'
-      : v >= 1_000 ? `${Math.round(v / 1_000)}k€` : `${Math.round(v)}€`
 
   const rows = [
     {
@@ -162,6 +175,158 @@ function SegmentBars({ g }: { g: KPIGlobal }) {
   )
 }
 
+// ─── Section CA Sellsy ────────────────────────────────────────────────────────
+function SellsySection({ data, loading }: { data: SellsyData | null; loading: boolean }) {
+  if (loading) return (
+    <div className="flex items-center justify-center py-10">
+      <div className="w-6 h-6 border-2 border-violet-500 border-t-transparent rounded-full animate-spin" />
+    </div>
+  )
+  if (!data) return (
+    <div className="text-center py-8 text-gray-400 text-sm">
+      <p className="text-2xl mb-2">📭</p>
+      <p>Données Sellsy non disponibles</p>
+      <p className="text-xs mt-1">Lancez un premier refresh via <code className="bg-gray-100 px-1 rounded">/api/sellsy/refresh</code></p>
+    </div>
+  )
+
+  const maxCA  = Math.max(...data.ca.monthly.map(r => r.total_ht), 1)
+  const maxCAU = Math.max(...data.caution.monthly.map(r => r.total_ht), 1)
+
+  return (
+    <div className="space-y-4">
+      {/* KPI cards Sellsy */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        <div className="kpi-card border-l-4 border-l-violet-500">
+          <p className="kpi-label">CA encaissé HT</p>
+          <p className="kpi-value text-violet-700">{fmtEurK(data.ca.total_ht)}</p>
+          <p className="kpi-sub">{data.ca.nb} factures payées</p>
+        </div>
+        <div className="kpi-card border-l-4 border-l-orange-400">
+          <p className="kpi-label">Cautions perçues HT</p>
+          <p className="kpi-value text-orange-600">{fmtEurK(data.caution.total_ht)}</p>
+          <p className="kpi-sub">{data.caution.nb} dépôts de garantie</p>
+        </div>
+        <div className="kpi-card border-l-4 border-l-gray-300">
+          <p className="kpi-label">Total encaissé HT</p>
+          <p className="kpi-value">{fmtEurK(data.ca.total_ht + data.caution.total_ht)}</p>
+          <p className="kpi-sub">{data.ca.nb + data.caution.nb} factures au total</p>
+        </div>
+        <div className="kpi-card">
+          <p className="kpi-label">Dernière mise à jour</p>
+          <p className="text-sm font-medium text-gray-700 mt-1">{data.cache_date}</p>
+          <p className="kpi-sub">cache 2x/jour</p>
+        </div>
+      </div>
+
+      {/* Tableaux CA + Cautions côte à côte */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        {/* CA par mois */}
+        <div className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
+          <div className="px-5 py-3 border-b border-gray-100 flex items-center justify-between">
+            <div>
+              <h3 className="font-semibold text-gray-900">CA facturé HT</h3>
+              <p className="text-xs text-gray-400 mt-0.5">Factures Sellsy payées par mois</p>
+            </div>
+            <span className="text-xs font-bold text-violet-600 bg-violet-50 px-2 py-1 rounded-full">
+              {fmtEurK(data.ca.total_ht)}
+            </span>
+          </div>
+          <div className="overflow-y-auto" style={{ maxHeight: 360 }}>
+            <table className="w-full text-sm">
+              <thead className="bg-gray-50 border-b border-gray-100 sticky top-0">
+                <tr>
+                  <th className="px-4 py-2 text-left text-xs font-semibold text-gray-500">Mois</th>
+                  <th className="px-4 py-2 text-center text-xs font-semibold text-gray-500">Factures</th>
+                  <th className="px-4 py-2 text-right text-xs font-semibold text-gray-500">Montant HT</th>
+                  <th className="px-4 py-2 text-right text-xs font-semibold text-gray-500 w-24">Part</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-50">
+                {data.ca.monthly.map(row => {
+                  const pct = Math.round(row.total_ht / data.ca.total_ht * 100)
+                  const barW = Math.round(row.total_ht / maxCA * 100)
+                  return (
+                    <tr key={row.month} className="hover:bg-gray-50">
+                      <td className="px-4 py-2.5 font-medium text-gray-800">{row.label}</td>
+                      <td className="px-4 py-2.5 text-center text-gray-500">{row.nb}</td>
+                      <td className="px-4 py-2.5 text-right font-semibold text-gray-800">
+                        {fmtEurK(row.total_ht)}
+                      </td>
+                      <td className="px-4 py-2.5">
+                        <div className="flex items-center gap-1.5">
+                          <div className="flex-1 h-1.5 bg-gray-100 rounded-full">
+                            <div className="h-1.5 bg-violet-400 rounded-full" style={{ width: `${barW}%` }} />
+                          </div>
+                          <span className="text-xs text-gray-400 w-8 text-right">{pct}%</span>
+                        </div>
+                      </td>
+                    </tr>
+                  )
+                })}
+                {data.ca.monthly.length === 0 && (
+                  <tr><td colSpan={4} className="px-4 py-8 text-center text-gray-400">Aucune donnée</td></tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        {/* Cautions par mois */}
+        <div className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
+          <div className="px-5 py-3 border-b border-gray-100 flex items-center justify-between">
+            <div>
+              <h3 className="font-semibold text-gray-900">Cautions perçues HT</h3>
+              <p className="text-xs text-gray-400 mt-0.5">Dépôts de garantie payés par mois</p>
+            </div>
+            <span className="text-xs font-bold text-orange-600 bg-orange-50 px-2 py-1 rounded-full">
+              {fmtEurK(data.caution.total_ht)}
+            </span>
+          </div>
+          <div className="overflow-y-auto" style={{ maxHeight: 360 }}>
+            <table className="w-full text-sm">
+              <thead className="bg-gray-50 border-b border-gray-100 sticky top-0">
+                <tr>
+                  <th className="px-4 py-2 text-left text-xs font-semibold text-gray-500">Mois</th>
+                  <th className="px-4 py-2 text-center text-xs font-semibold text-gray-500">Factures</th>
+                  <th className="px-4 py-2 text-right text-xs font-semibold text-gray-500">Montant HT</th>
+                  <th className="px-4 py-2 text-right text-xs font-semibold text-gray-500 w-24">Part</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-50">
+                {data.caution.monthly.map(row => {
+                  const pct = Math.round(row.total_ht / data.caution.total_ht * 100)
+                  const barW = Math.round(row.total_ht / maxCAU * 100)
+                  return (
+                    <tr key={row.month} className="hover:bg-gray-50">
+                      <td className="px-4 py-2.5 font-medium text-gray-800">{row.label}</td>
+                      <td className="px-4 py-2.5 text-center text-gray-500">{row.nb}</td>
+                      <td className="px-4 py-2.5 text-right font-semibold text-gray-800">
+                        {fmtEurK(row.total_ht)}
+                      </td>
+                      <td className="px-4 py-2.5">
+                        <div className="flex items-center gap-1.5">
+                          <div className="flex-1 h-1.5 bg-gray-100 rounded-full">
+                            <div className="h-1.5 bg-orange-400 rounded-full" style={{ width: `${barW}%` }} />
+                          </div>
+                          <span className="text-xs text-gray-400 w-8 text-right">{pct}%</span>
+                        </div>
+                      </td>
+                    </tr>
+                  )
+                })}
+                {data.caution.monthly.length === 0 && (
+                  <tr><td colSpan={4} className="px-4 py-8 text-center text-gray-400">Aucune donnée</td></tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 export default function DashboardClient() {
   const [data, setData]               = useState<KPIData | null>(null)
   const [loading, setLoading]         = useState(true)
@@ -173,6 +338,8 @@ export default function DashboardClient() {
   const [showLog, setShowLog]         = useState(false)
   const [log, setLog]                 = useState<Array<{ date: string; entries: ChangeEntry[] }>>([])
   const [refreshing, setRefreshing]   = useState(false)
+  const [sellsy, setSellsy]           = useState<SellsyData | null>(null)
+  const [sellsyLoading, setSellsyLoading] = useState(true)
 
   const [lastRead, setLastRead] = useState<string>(() => {
     if (typeof window !== 'undefined') {
@@ -209,6 +376,14 @@ export default function DashboardClient() {
       .then(r => r.json())
       .then(j => setLog(j.changelog ?? []))
       .catch(() => {})
+  }, [])
+
+  useEffect(() => {
+    fetch('/api/sellsy')
+      .then(r => r.json())
+      .then(j => { if (!j.error) setSellsy(j) })
+      .catch(() => {})
+      .finally(() => setSellsyLoading(false))
   }, [])
 
   function applyFilter(s: Segment, ti: TypeInstall, yr: string) {
@@ -374,12 +549,25 @@ export default function DashboardClient() {
               </div>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
               <SegmentBars g={g} />
               <StatBar title="Type d'installation"  data={g.par_type_install} total={g.total_signes} />
               <StatBar title="Statut dossiers"
                 data={g.par_statut}
                 total={Object.values(g.par_statut).reduce((a, b) => a + b, 0)} />
+            </div>
+
+            {/* ─── Section CA Sellsy ──────────────────────────────────────── */}
+            <div className="bg-white rounded-xl border border-gray-100 shadow-sm mb-4">
+              <div className="px-5 py-4 border-b border-gray-100 flex items-center justify-between">
+                <div>
+                  <h2 className="font-semibold text-gray-900">💰 CA & Cautions — Sellsy</h2>
+                  <p className="text-xs text-gray-400 mt-0.5">Factures payées · mis à jour 2x/jour</p>
+                </div>
+              </div>
+              <div className="p-5">
+                <SellsySection data={sellsy} loading={sellsyLoading} />
+              </div>
             </div>
           </>
         )}
