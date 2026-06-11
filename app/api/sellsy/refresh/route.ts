@@ -35,24 +35,44 @@ interface SellsyInvoice {
   amounts: { total_excl_tax: string }
 }
 
-async function fetchAllPaidInvoices(token: string): Promise<SellsyInvoice[]> {
+const sleep = (ms: number) => new Promise(r => setTimeout(r, ms))
+
+async function sellsyFetch(token: string, url: string, body?: object, retries = 5): Promise<Response> {
+  for (let i = 0; i < retries; i++) {
+    const res = await fetch(url, {
+      method: body ? 'POST' : 'GET',
+      headers: {
+        Authorization:  `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      },
+      ...(body ? { body: JSON.stringify(body) } : {}),
+    })
+    if (res.status === 429) {
+      const wait = (i + 1) * 2000
+      console.log(`Rate limit hit, waiting ${wait}ms...`)
+      await sleep(wait)
+      continue
+    }
+    return res
+  }
+  throw new Error('Max retries reached on Sellsy API')
+}
+
+async function fetchAllPaidInvoices(token: string, dateStart?: string): Promise<SellsyInvoice[]> {
   const all: SellsyInvoice[] = []
   let offset = 0
-  const limit = 100
+  const limit = 50
+
+  const filters: Record<string, unknown> = { status: ['paid'] }
+  if (dateStart) {
+    filters.date = { start: dateStart }
+  }
 
   while (true) {
-    const res = await fetch(
+    const res = await sellsyFetch(
+      token,
       `${SELLSY_API}/invoices/search?limit=${limit}&offset=${offset}&order=date&direction=desc`,
-      {
-        method: 'POST',
-        headers: {
-          Authorization:  `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          filters: { status: ['paid'] },
-        }),
-      }
+      { filters }
     )
     if (!res.ok) throw new Error(`Sellsy invoices error: ${await res.text()}`)
     const d = await res.json() as {
@@ -62,6 +82,7 @@ async function fetchAllPaidInvoices(token: string): Promise<SellsyInvoice[]> {
     all.push(...d.data)
     if (all.length >= d.pagination.total) break
     offset += limit
+    await sleep(1000)
   }
 
   return all
@@ -75,9 +96,7 @@ interface InvoiceRow {
 
 async function fetchInvoiceRows(token: string, id: number): Promise<InvoiceRow[]> {
   try {
-    const res = await fetch(`${SELLSY_API}/invoices/${id}`, {
-      headers: { Authorization: `Bearer ${token}` },
-    })
+    const res = await sellsyFetch(token, `${SELLSY_API}/invoices/${id}`)
     if (!res.ok) return []
     const d = await res.json() as { rows?: InvoiceRow[] }
     return d.rows || []
@@ -118,8 +137,6 @@ async function aggregate(token: string, invoices: SellsyInvoice[]): Promise<Cach
   const cauMap = new Map<string, MonthData>()
 
   // Appels séquentiels avec 800ms entre chaque pour respecter le rate limit Sellsy
-  const sleep = (ms: number) => new Promise(r => setTimeout(r, ms))
-
   for (let i = 0; i < invoices.length; i++) {
     const inv = invoices[i]
     const cau = await isCaution(token, inv.id)
@@ -197,20 +214,86 @@ async function cleanOldCache(): Promise<void> {
   }
 }
 
-export async function POST() {
+// Lire le cache existant depuis Airtable
+async function readExistingCache(): Promise<CacheData | null> {
   try {
-    const token    = await getSellsyToken()
-    const invoices = await fetchAllPaidInvoices(token)
-    const data     = await aggregate(token, invoices)
-    await saveToAirtable(data)
+    const url = `https://api.airtable.com/v0/${BASE}/${TABLE}?sort[0][field]=cache_date&sort[0][direction]=desc&pageSize=1`
+    const res = await fetch(url, { headers: { Authorization: `Bearer ${AT_KEY}` } })
+    if (!res.ok) return null
+    const d = await res.json() as { records: Array<{ fields: { cache_data: string } }> }
+    if (!d.records.length) return null
+    return JSON.parse(d.records[0].fields.cache_data) as CacheData
+  } catch {
+    return null
+  }
+}
+
+// Merger les nouvelles données dans le cache existant
+function mergeIntoCache(existing: CacheData, fresh: CacheData): CacheData {
+  // Pour chaque mois des nouvelles données, on écrase dans le cache existant
+  const mergeMonthly = (existingMonths: MonthData[], freshMonths: MonthData[]): MonthData[] => {
+    const map = new Map(existingMonths.map(m => [m.month, { ...m }]))
+    for (const fm of freshMonths) {
+      map.set(fm.month, fm) // écrase les mois récents
+    }
+    return Array.from(map.values()).sort((a, b) => b.month.localeCompare(a.month))
+  }
+
+  const caMonthly  = mergeMonthly(existing.ca.monthly,      fresh.ca.monthly)
+  const cauMonthly = mergeMonthly(existing.caution.monthly,  fresh.caution.monthly)
+
+  return {
+    ca: {
+      monthly:  caMonthly,
+      total_ht: caMonthly.reduce((s, r) => s + r.total_ht, 0),
+      nb:       caMonthly.reduce((s, r) => s + r.nb, 0),
+    },
+    caution: {
+      monthly:  cauMonthly,
+      total_ht: cauMonthly.reduce((s, r) => s + r.total_ht, 0),
+      nb:       cauMonthly.reduce((s, r) => s + r.nb, 0),
+    },
+    last_updated: new Date().toISOString(),
+  }
+}
+
+export async function POST(req: Request) {
+  try {
+    const { searchParams } = new URL(req.url)
+    const full = searchParams.get('full') === '1'
+
+    const token = await getSellsyToken()
+
+    let dateStart: string | undefined
+    if (!full) {
+      // Cron quotidien : seulement les 3 derniers mois
+      const d = new Date()
+      d.setMonth(d.getMonth() - 3)
+      dateStart = d.toISOString().slice(0, 10)
+    }
+
+    const invoices = await fetchAllPaidInvoices(token, dateStart)
+    const freshData = await aggregate(token, invoices)
+
+    let finalData = freshData
+    if (!full) {
+      // Merger avec le cache existant
+      const existing = await readExistingCache()
+      if (existing) {
+        finalData = mergeIntoCache(existing, freshData)
+      }
+    }
+
+    await saveToAirtable(finalData)
     await cleanOldCache()
 
     return NextResponse.json({
       ok: true,
-      ca_total:      Math.round(data.ca.total_ht),
-      caution_total: Math.round(data.caution.total_ht),
+      mode:          full ? 'full' : 'incremental (3 mois)',
+      ca_total:      Math.round(finalData.ca.total_ht),
+      caution_total: Math.round(finalData.caution.total_ht),
       nb_invoices:   invoices.length,
-      last_updated:  data.last_updated,
+      last_updated:  finalData.last_updated,
     })
   } catch (e) {
     console.error('[Sellsy refresh]', e)
@@ -218,6 +301,6 @@ export async function POST() {
   }
 }
 
-export async function GET() {
-  return POST()
+export async function GET(req: Request) {
+  return POST(req)
 }
