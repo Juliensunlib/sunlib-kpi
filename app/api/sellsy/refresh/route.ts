@@ -58,14 +58,17 @@ async function sellsyFetch(token: string, url: string, body?: object, retries = 
   throw new Error('Max retries reached on Sellsy API')
 }
 
-async function fetchAllPaidInvoices(token: string, dateStart?: string): Promise<SellsyInvoice[]> {
+async function fetchAllPaidInvoices(token: string, dateStart?: string, dateEnd?: string): Promise<SellsyInvoice[]> {
   const all: SellsyInvoice[] = []
   let offset = 0
   const limit = 50
 
   const filters: Record<string, unknown> = { status: ['paid'] }
-  if (dateStart) {
-    filters.date = { start: dateStart }
+  if (dateStart || dateEnd) {
+    filters.date = {
+      ...(dateStart ? { start: dateStart } : {}),
+      ...(dateEnd   ? { end: dateEnd }     : {}),
+    }
   }
 
   while (true) {
@@ -260,36 +263,38 @@ function mergeIntoCache(existing: CacheData, fresh: CacheData): CacheData {
 export async function POST(req: Request) {
   try {
     const { searchParams } = new URL(req.url)
-    const full = searchParams.get('full') === '1'
-
+    const month = searchParams.get('month') // ex: 2024-01
     const token = await getSellsyToken()
 
     let dateStart: string | undefined
-    if (!full) {
-      // Cron quotidien : seulement les 3 derniers mois
+    let dateEnd: string | undefined
+
+    if (month) {
+      // Mode mois par mois : ex ?month=2024-01
+      const [y, m] = month.split('-').map(Number)
+      dateStart = `${y}-${String(m).padStart(2, '0')}-01`
+      const lastDay = new Date(y, m, 0).getDate()
+      dateEnd = `${y}-${String(m).padStart(2, '0')}-${lastDay}`
+    } else {
+      // Cron quotidien : 3 derniers mois
       const d = new Date()
       d.setMonth(d.getMonth() - 3)
       dateStart = d.toISOString().slice(0, 10)
     }
 
-    const invoices = await fetchAllPaidInvoices(token, dateStart)
+    const invoices = await fetchAllPaidInvoices(token, dateStart, dateEnd)
     const freshData = await aggregate(token, invoices)
 
-    let finalData = freshData
-    if (!full) {
-      // Merger avec le cache existant
-      const existing = await readExistingCache()
-      if (existing) {
-        finalData = mergeIntoCache(existing, freshData)
-      }
-    }
+    // Toujours merger avec le cache existant
+    const existing = await readExistingCache()
+    const finalData = existing ? mergeIntoCache(existing, freshData) : freshData
 
     await saveToAirtable(finalData)
     await cleanOldCache()
 
     return NextResponse.json({
       ok: true,
-      mode:          full ? 'full' : 'incremental (3 mois)',
+      mode:          month ? `mois ${month}` : 'incremental (3 mois)',
       ca_total:      Math.round(finalData.ca.total_ht),
       caution_total: Math.round(finalData.caution.total_ht),
       nb_invoices:   invoices.length,
