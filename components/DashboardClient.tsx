@@ -186,17 +186,15 @@ function SegmentBars({ g }: { g: KPIGlobal }) {
 }
 
 // ─── Section CA Sellsy ────────────────────────────────────────────────────────
-type SellsyTab = 'paid' | 'due' | 'late'
+type SellsyTab = 'paid' | 'late'
 
 const SELLSY_TABS: { id: SellsyTab; label: string; color: string; emptyMsg: string }[] = [
   { id: 'paid', label: '✅ Payées',    color: 'border-violet-500 text-violet-600', emptyMsg: 'Aucune facture payée' },
-  { id: 'due',  label: '📤 À payer',   color: 'border-blue-500 text-blue-600',    emptyMsg: 'Aucune facture à payer' },
   { id: 'late', label: '⚠️ En retard', color: 'border-red-500 text-red-600',      emptyMsg: 'Aucune facture en retard' },
 ]
 
 const STATUS_COLORS: Record<SellsyTab, { ca: string; caution: string; card: string; text: string }> = {
   paid: { ca: '#8b5cf6', caution: '#f97316', card: 'border-l-violet-500', text: 'text-violet-700' },
-  due:  { ca: '#3b82f6', caution: '#f59e0b', card: 'border-l-blue-500',   text: 'text-blue-700'   },
   late: { ca: '#ef4444', caution: '#f97316', card: 'border-l-red-500',    text: 'text-red-700'    },
 }
 
