@@ -33,7 +33,10 @@ interface SellsyInvoice {
   amounts: { total_excl_tax: string }
 }
 
-async function fetchAllPaidInvoices(token: string): Promise<SellsyInvoice[]> {
+async function fetchInvoicesByStatus(
+  token: string,
+  status: string
+): Promise<SellsyInvoice[]> {
   const all: SellsyInvoice[] = []
   let offset = 0
   const limit = 100
@@ -46,16 +49,16 @@ async function fetchAllPaidInvoices(token: string): Promise<SellsyInvoice[]> {
         {
           method: 'POST',
           headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-          body: JSON.stringify({ filters: { status: ['paid'] } }),
+          body: JSON.stringify({ filters: { status: [status] } }),
         }
       )
       if (res.status === 429) { await sleep((attempt + 1) * 2000); continue }
       break
     }
-    if (!res || !res.ok) throw new Error(`Sellsy search error (offset=${offset}): ${await res?.text()}`)
+    if (!res || !res.ok) throw new Error(`Sellsy search error (${status}, offset=${offset}): ${await res?.text()}`)
     const d = await res.json() as { data: SellsyInvoice[]; pagination: { total: number } }
     all.push(...d.data)
-    console.log(`[Sellsy] fetched ${all.length}/${d.pagination.total}`)
+    console.log(`[Sellsy] ${status}: fetched ${all.length}/${d.pagination.total}`)
     offset += limit
     if (offset >= d.pagination.total) break
     await sleep(300)
@@ -75,9 +78,16 @@ function monthLabel(ym: string): string {
 }
 
 interface MonthData { month: string; label: string; nb: number; total_ht: number }
-interface CacheData {
+
+interface StatusData {
   ca:      { monthly: MonthData[]; total_ht: number; nb: number }
   caution: { monthly: MonthData[]; total_ht: number; nb: number }
+}
+
+interface CacheData {
+  paid:    StatusData
+  due:     StatusData
+  late:    StatusData
   last_updated: string
 }
 
@@ -102,7 +112,15 @@ function summarize(monthly: MonthData[]) {
   }
 }
 
-// Supprime tout + sauvegarde 1 seul record
+function buildStatusData(invoices: SellsyInvoice[]): StatusData {
+  const caInvoices  = invoices.filter(inv => !isCaution(inv))
+  const cauInvoices = invoices.filter(inv =>  isCaution(inv))
+  return {
+    ca:      summarize(buildMonthly(caInvoices)),
+    caution: summarize(buildMonthly(cauInvoices)),
+  }
+}
+
 async function replaceCache(data: CacheData): Promise<void> {
   const listRes = await fetch(`https://api.airtable.com/v0/${BASE}/${TABLE}?pageSize=100`, {
     headers: { Authorization: `Bearer ${AT_KEY}` }
@@ -133,15 +151,19 @@ export async function POST(req: Request) {
     const { searchParams } = new URL(req.url)
     const dryRun = searchParams.get('dry_run') === 'true'
 
-    const token    = await getSellsyToken()
-    const invoices = await fetchAllPaidInvoices(token)
+    const token = await getSellsyToken()
 
-    const caInvoices  = invoices.filter(inv => !isCaution(inv))
-    const cauInvoices = invoices.filter(inv =>  isCaution(inv))
+    // Fetch les 3 statuts en parallèle
+    const [paidInvoices, dueInvoices, lateInvoices] = await Promise.all([
+      fetchInvoicesByStatus(token, 'paid'),
+      fetchInvoicesByStatus(token, 'due'),
+      fetchInvoicesByStatus(token, 'late'),
+    ])
 
     const finalData: CacheData = {
-      ca:      summarize(buildMonthly(caInvoices)),
-      caution: summarize(buildMonthly(cauInvoices)),
+      paid:  buildStatusData(paidInvoices),
+      due:   buildStatusData(dueInvoices),
+      late:  buildStatusData(lateInvoices),
       last_updated: new Date().toISOString(),
     }
 
@@ -150,15 +172,16 @@ export async function POST(req: Request) {
     }
 
     return NextResponse.json({
-      ok:               true,
-      dry_run:          dryRun,
-      total_fetched:    invoices.length,
-      ca_invoices:      caInvoices.length,
-      cau_invoices:     cauInvoices.length,
-      ca_total_ht:      Math.round(finalData.ca.total_ht),
-      caution_total_ht: Math.round(finalData.caution.total_ht),
-      total_months:     finalData.ca.monthly.length,
-      last_updated:     finalData.last_updated,
+      ok:            true,
+      dry_run:       dryRun,
+      paid_total:    paidInvoices.length,
+      due_total:     dueInvoices.length,
+      late_total:    lateInvoices.length,
+      paid_ht:       Math.round(finalData.paid.ca.total_ht + finalData.paid.caution.total_ht),
+      due_ht:        Math.round(finalData.due.ca.total_ht  + finalData.due.caution.total_ht),
+      late_ht:       Math.round(finalData.late.ca.total_ht + finalData.late.caution.total_ht),
+      total_months:  finalData.paid.ca.monthly.length,
+      last_updated:  finalData.last_updated,
     })
   } catch (e) {
     console.error('[Sellsy refresh]', e)
