@@ -273,11 +273,7 @@ function SellsySection({ data, loading }: { data: SellsyData | null; loading: bo
           <p className="kpi-value">{fmtEurK(totalCa + totalCau)}</p>
           <p className="kpi-sub">{nbCa + nbCau} factures au total</p>
         </div>
-        <div className="kpi-card">
-          <p className="kpi-label">Ticket moyen CA</p>
-          <p className="kpi-value">{nbCa > 0 ? fmtEurK(totalCa / nbCa) : '—'}</p>
-          <p className="kpi-sub">par facture abonnement</p>
-        </div>
+
       </div>
 
       {/* Bar chart CA + Cautions empilés */}
