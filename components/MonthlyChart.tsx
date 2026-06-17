@@ -4,17 +4,17 @@ import {
   Legend, ResponsiveContainer, Cell
 } from 'recharts'
 
-type TabId = 'signes' | 'poses' | 'capex_signes' | 'capex_poses' | 'kwc' | 'duree_f2' | 'mrr'
+type TabId = 'signes' | 'poses' | 'capex_signes' | 'capex_poses' | 'kwc' | 'kwc_poses' | 'duree_f2' | 'mrr' | 'mrr_pose'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type MonthRow = Record<string, any>
 
-const PRO_COLOR  = '#3b82f6'  // bleu
-const PART_COLOR = '#f59e0b'  // amber
-const TOT_COLOR  = '#6366f1'  // indigo (quand filtre actif)
-const MRR_PRO_COLOR  = '#059669' // emerald-600
-const MRR_PART_COLOR = '#34d399' // emerald-400
-const MRR_TOT_COLOR  = '#10b981' // emerald-500
+const PRO_COLOR      = '#3b82f6'  // bleu
+const PART_COLOR     = '#f59e0b'  // amber
+const TOT_COLOR      = '#6366f1'  // indigo (quand filtre actif)
+const MRR_PRO_COLOR  = '#059669'  // emerald-600
+const MRR_PART_COLOR = '#34d399'  // emerald-400
+const MRR_TOT_COLOR  = '#10b981'  // emerald-500
 
 const fmtEur = (v: number) =>
   v >= 1_000_000
@@ -29,8 +29,8 @@ function CustomTooltip({ active, payload, label, metric }: {
   active?: boolean; payload?: any[]; label?: string; metric: TabId
 }) {
   if (!active || !payload?.length) return null
-  const isEur = metric === 'capex_signes' || metric === 'capex_poses' || metric === 'mrr'
-  const isKwc = metric === 'kwc'
+  const isEur = ['capex_signes', 'capex_poses', 'mrr', 'mrr_pose'].includes(metric)
+  const isKwc = ['kwc', 'kwc_poses'].includes(metric)
   const isF2  = metric === 'duree_f2'
 
   const fmt = (v: number) =>
@@ -90,6 +90,10 @@ const METRIC_CONFIG: Record<TabId, {
     proKey: 'kwc_signes_pro', partKey: 'kwc_signes_part', totalKey: 'kwc_signes',
     label: 'kWc signés', stacked: true,
   },
+  kwc_poses: {
+    proKey: 'kwc_poses_pro', partKey: 'kwc_poses_part', totalKey: 'kwc_poses',
+    label: 'kWc posés', stacked: true,
+  },
   duree_f2: {
     proKey: 'moy_duree_f2_pro', partKey: 'moy_duree_f2_part', totalKey: 'moy_duree_f2',
     label: 'Durée moy. F2 (j)', stacked: false,
@@ -98,13 +102,20 @@ const METRIC_CONFIG: Record<TabId, {
     proKey: 'mrr_signe_pro', partKey: 'mrr_signe_part', totalKey: 'mrr_signe',
     label: 'MRR souscrit HT', stacked: true,
   },
+  mrr_pose: {
+    proKey: 'mrr_pose_pro', partKey: 'mrr_pose_part', totalKey: 'mrr_pose',
+    label: 'MRR posé HT', stacked: true,
+  },
 }
 
 // Formateur axe Y
 function yFormatter(metric: TabId) {
-  if (metric === 'capex_signes' || metric === 'capex_poses' || metric === 'mrr') return (v: number) => fmtEur(v)
-  if (metric === 'kwc') return (v: number) => `${v.toFixed(0)}`
-  if (metric === 'duree_f2') return (v: number) => `${v}j`
+  if (['capex_signes', 'capex_poses', 'mrr', 'mrr_pose'].includes(metric))
+    return (v: number) => fmtEur(v)
+  if (['kwc', 'kwc_poses'].includes(metric))
+    return (v: number) => `${v.toFixed(0)}`
+  if (metric === 'duree_f2')
+    return (v: number) => `${v}j`
   return (v: number) => String(v)
 }
 
@@ -114,7 +125,7 @@ export default function MonthlyChart({ data, metric, showSegments }: Props) {
   const cfg = METRIC_CONFIG[metric]
   const isStacked = cfg.stacked && showSegments
 
-  const isMrr = metric === 'mrr'
+  const isMrr     = metric === 'mrr' || metric === 'mrr_pose'
   const proColor  = isMrr ? MRR_PRO_COLOR  : PRO_COLOR
   const partColor = isMrr ? MRR_PART_COLOR : PART_COLOR
   const totColor  = isMrr ? MRR_TOT_COLOR  : TOT_COLOR
@@ -128,6 +139,7 @@ export default function MonthlyChart({ data, metric, showSegments }: Props) {
   }))
 
   const yFmt = yFormatter(metric)
+  const isWide = ['capex_signes', 'capex_poses', 'mrr', 'mrr_pose'].includes(metric)
 
   return (
     <div className="w-full">
@@ -150,7 +162,7 @@ export default function MonthlyChart({ data, metric, showSegments }: Props) {
             tick={{ fontSize: 11, fill: '#9ca3af' }}
             axisLine={false}
             tickLine={false}
-            width={metric === 'capex_signes' || metric === 'capex_poses' || metric === 'mrr' ? 60 : 40}
+            width={isWide ? 60 : 40}
           />
           <Tooltip content={<CustomTooltip metric={metric} />} cursor={{ fill: '#f8fafc' }} />
           {showSegments && (
