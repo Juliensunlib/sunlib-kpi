@@ -4,7 +4,13 @@ import { jwtVerify } from 'jose'
 
 const secret = new TextEncoder().encode(process.env.JWT_SECRET!)
 
-const PUBLIC_PATHS = ['/login', '/api/auth', '/api/snapshot', '/api/sellsy']
+const PUBLIC_PATHS = [
+  '/login',
+  '/api/auth',
+  '/api/snapshot',
+  '/api/sellsy',
+  '/api/kpis/public',
+]
 
 export async function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl
@@ -27,7 +33,11 @@ export async function middleware(req: NextRequest) {
 
     // Rôle commercial → accès à /commercial et /api/commercial uniquement
     if (role === 'commercial') {
-      if (pathname.startsWith('/dashboard') || pathname.startsWith('/api/kpis') || pathname.startsWith('/api/snapshot')) {
+      if (
+        pathname.startsWith('/dashboard') ||
+        pathname.startsWith('/api/kpis') ||
+        pathname.startsWith('/api/snapshot')
+      ) {
         return NextResponse.redirect(new URL('/commercial', req.url))
       }
     }
