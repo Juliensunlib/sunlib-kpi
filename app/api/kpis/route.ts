@@ -42,6 +42,28 @@ function normalizeSegment(seg: string): string {
   return seg || 'Non défini'
 }
 
+// Extraire l'année depuis une date ISO ou dd/mm/yyyy
+function yearFromDateStr(dateStr: string): string {
+  if (!dateStr) return ''
+  // Format ISO : 2026-06-12T...
+  if (dateStr.includes('-') && dateStr.indexOf('-') === 4) return dateStr.slice(0, 4)
+  // Format dd/mm/yyyy
+  const parts = dateStr.split('/')
+  if (parts.length === 3) return parts[2].slice(0, 4)
+  return ''
+}
+
+function moisFromDateStr(dateStr: string): string {
+  if (!dateStr) return ''
+  try {
+    const d = new Date(dateStr)
+    if (isNaN(d.getTime())) return ''
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
+  } catch {
+    return ''
+  }
+}
+
 const F = {
   SEGMENT:            'fld3SpiGzcJrADLgL',
   MOIS_SIGNATURE:     'fldk94N7n4aQW482K',
@@ -66,6 +88,15 @@ type Rec = { id: string; fields: Record<string, unknown> }
 function isSigne(f: Record<string, unknown>): boolean {
   const att = f[F.CONTRAT_ATTACHMENT]
   return Array.isArray(att) && att.length > 0 && str(f[F.STATUT_ABONNE]) !== 'Annulé'
+}
+
+function getMoisPose(f: Record<string, unknown>, moisSig: string): string {
+  const dateF2 = str(f[F.DATE_MODIF_F2])
+  if (dateF2) {
+    const m = moisFromDateStr(dateF2)
+    if (m) return m
+  }
+  return moisSig
 }
 
 async function fetchAll(): Promise<Rec[]> {
@@ -95,8 +126,8 @@ export async function GET(req: NextRequest) {
 
     const records = await fetchAll()
 
+    // Filtre sur les records (segment, type install, annee sur mois signature)
     const filtered = records.filter(r => {
-      // Filtre segment — "Particulier" = Solo OU Duo
       if (segment !== 'Tous') {
         const seg = str(r.fields[F.SEGMENT])
         if (segment === 'Particulier') {
@@ -106,10 +137,18 @@ export async function GET(req: NextRequest) {
         }
       }
       if (typeInstall !== 'Tous' && str(r.fields[F.TYPE_INSTALLATION]) !== typeInstall) return false
-      if (annee && !str(r.fields[F.MOIS_SIGNATURE]).startsWith(String(annee))) return false
+      // Pas de filtre annee ici sur moisSignature — on filtre les signés par annee
+      // mais les poses seront filtrées par leur mois de pose réel
       return true
     })
 
+    const isParticulier = (r: Rec) => {
+      const seg = str(r.fields[F.SEGMENT])
+      return seg === 'Solo' || seg === 'Duo'
+    }
+    const isPro = (r: Rec) => str(r.fields[F.SEGMENT]) === 'Pro'
+
+    // ─── Construction mensuelle ───────────────────────────────────────────────
     const byMonth = new Map<string, { signes: Rec[]; poses: Rec[]; f3: Rec[] }>()
     const ensure  = (m: string) => {
       if (!byMonth.has(m)) byMonth.set(m, { signes: [], poses: [], f3: [] })
@@ -122,35 +161,28 @@ export async function GET(req: NextRequest) {
       const etatF2  = str(f[F.ETAT_F2])
       const etatF3  = str(f[F.ETAT_F3])
 
+      // Contrats signés — filtrés par année de signature
       if (isSigne(f) && moisSig) {
-        ensure(moisSig).signes.push(r)
+        if (!annee || moisSig.startsWith(String(annee))) {
+          ensure(moisSig).signes.push(r)
+        }
       }
 
+      // Poses F2 — affectées au mois de pose réel (DATE_MODIF_F2), filtrées par année de pose
       if (etatF2 === 'Validée') {
-        // Date réelle de pose = dernière modification de l'état F2
-        const dateF2 = str(f[F.DATE_MODIF_F2])
-        let moisPose = moisSig
-        if (dateF2) {
-          const d = new Date(dateF2)
-          if (!isNaN(d.getTime())) {
-            moisPose = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
-          }
-        }
+        const moisPose = getMoisPose(f, moisSig)
         if (moisPose && (!annee || moisPose.startsWith(String(annee)))) {
           ensure(moisPose).poses.push(r)
         }
       }
 
+      // F3 — filtrés par année de signature
       if (etatF3 === 'Validée' && moisSig) {
-        ensure(moisSig).f3.push(r)
+        if (!annee || moisSig.startsWith(String(annee))) {
+          ensure(moisSig).f3.push(r)
+        }
       }
     }
-
-    const isParticulier = (r: Rec) => {
-      const seg = str(r.fields[F.SEGMENT])
-      return seg === 'Solo' || seg === 'Duo'
-    }
-    const isPro = (r: Rec) => str(r.fields[F.SEGMENT]) === 'Pro'
 
     const monthly = Array.from(byMonth.keys()).sort().map(month => {
       const { signes, poses, f3 } = byMonth.get(month)!
@@ -167,11 +199,9 @@ export async function GET(req: NextRequest) {
         kwc_signes_part:      signes.filter(isParticulier).reduce((s, r) => s + num(r.fields[F.KWC]), 0),
         moy_abonnement:       avg(signes.map(r => num(r.fields[F.ABONNEMENT_KPI])).filter(v => v > 0)),
         moy_duree_contrat:    avg(signes.map(r => num(r.fields[F.DUREE_CONTRAT_KPI])).filter(v => v > 0)),
-        // ─── MRR souscrit (somme des abonnements HT) ─────────────────────────
         mrr_signe:      signes.reduce((s, r) => s + num(r.fields[F.ABONNEMENT_KPI]), 0),
         mrr_signe_pro:  signes.filter(isPro).reduce((s, r) => s + num(r.fields[F.ABONNEMENT_KPI]), 0),
         mrr_signe_part: signes.filter(isParticulier).reduce((s, r) => s + num(r.fields[F.ABONNEMENT_KPI]), 0),
-        // ─────────────────────────────────────────────────────────────────────
         nb_poses:          poses.length,
         nb_poses_pro:      poses.filter(isPro).length,
         nb_poses_part:     poses.filter(isParticulier).length,
@@ -184,12 +214,28 @@ export async function GET(req: NextRequest) {
         moy_duree_f2:      avg(poses.map(r => num(r.fields[F.DUREE_F2_J])).filter(v => v > 0)),
         moy_duree_f2_pro:  avg(poses.filter(isPro).map(r => num(r.fields[F.DUREE_F2_J])).filter(v => v > 0)),
         moy_duree_f2_part: avg(poses.filter(isParticulier).map(r => num(r.fields[F.DUREE_F2_J])).filter(v => v > 0)),
+        // ─── MRR posé ────────────────────────────────────────────────────────
+        mrr_pose:      poses.reduce((s, r) => s + num(r.fields[F.ABONNEMENT_KPI]), 0),
+        mrr_pose_pro:  poses.filter(isPro).reduce((s, r) => s + num(r.fields[F.ABONNEMENT_KPI]), 0),
+        mrr_pose_part: poses.filter(isParticulier).reduce((s, r) => s + num(r.fields[F.ABONNEMENT_KPI]), 0),
         nb_f3:             f3.length,
       }
     })
 
-    const allSignes = filtered.filter(r => isSigne(r.fields))
-    const allPoses  = filtered.filter(r => str(r.fields[F.ETAT_F2]) === 'Validée')
+    // ─── Global : signés filtrés par année de signature ───────────────────────
+    const allSignes = filtered.filter(r => {
+      if (!isSigne(r.fields)) return false
+      if (!annee) return true
+      return str(r.fields[F.MOIS_SIGNATURE]).startsWith(String(annee))
+    })
+
+    // ─── Global : poses filtrées par année de pose réelle ────────────────────
+    const allPoses = filtered.filter(r => {
+      if (str(r.fields[F.ETAT_F2]) !== 'Validée') return false
+      if (!annee) return true
+      const moisPose = getMoisPose(r.fields, str(r.fields[F.MOIS_SIGNATURE]))
+      return moisPose.startsWith(String(annee))
+    })
 
     const par_segment:      Record<string, number> = {}
     const par_type_install: Record<string, number> = {}
@@ -217,11 +263,15 @@ export async function GET(req: NextRequest) {
         moy_duree_f2:       avg(allPoses.map(r => num(r.fields[F.DUREE_F2_J])).filter(v => v > 0)),
         mandats_signes:     allSignes.filter(r => bool(r.fields[F.MANDAT_SIGNE])).length,
         mandats_total:      allSignes.length,
-        // ─── MRR total ────────────────────────────────────────────────────────
-        total_mrr: allSignes.reduce((s, r) => s + num(r.fields[F.ABONNEMENT_KPI]), 0),
-        mrr_pro:   allSignes.filter(isPro).reduce((s, r) => s + num(r.fields[F.ABONNEMENT_KPI]), 0),
-        mrr_part:  allSignes.filter(isParticulier).reduce((s, r) => s + num(r.fields[F.ABONNEMENT_KPI]), 0),
-        // ─────────────────────────────────────────────────────────────────────
+        // ─── MRR souscrit ─────────────────────────────────────────────────────
+        total_mrr:  allSignes.reduce((s, r) => s + num(r.fields[F.ABONNEMENT_KPI]), 0),
+        mrr_pro:    allSignes.filter(isPro).reduce((s, r) => s + num(r.fields[F.ABONNEMENT_KPI]), 0),
+        mrr_part:   allSignes.filter(isParticulier).reduce((s, r) => s + num(r.fields[F.ABONNEMENT_KPI]), 0),
+        // ─── MRR posé ─────────────────────────────────────────────────────────
+        total_mrr_pose: allPoses.reduce((s, r) => s + num(r.fields[F.ABONNEMENT_KPI]), 0),
+        mrr_pose_pro:   allPoses.filter(isPro).reduce((s, r) => s + num(r.fields[F.ABONNEMENT_KPI]), 0),
+        mrr_pose_part:  allPoses.filter(isParticulier).reduce((s, r) => s + num(r.fields[F.ABONNEMENT_KPI]), 0),
+        // ─── Segmentation ─────────────────────────────────────────────────────
         par_segment, par_type_install, par_statut,
         capex_pro:  allSignes.filter(isPro).reduce((s, r) => s + num(r.fields[F.CAPEX_HT]), 0),
         capex_part: allSignes.filter(isParticulier).reduce((s, r) => s + num(r.fields[F.CAPEX_HT]), 0),
