@@ -9,7 +9,7 @@ import Changelog from './Changelog'
 
 type Segment     = 'Tous' | 'Pro' | 'Particulier'
 type TypeInstall = 'Tous' | 'PV seul' | 'PV + Batterie' | 'PV + Batterie Virtuelle'
-type TabId       = 'signes' | 'poses' | 'capex_signes' | 'capex_poses' | 'kwc' | 'duree_f2' | 'mrr'
+type TabId       = 'signes' | 'poses' | 'capex_signes' | 'capex_poses' | 'kwc' | 'kwc_poses' | 'duree_f2' | 'mrr' | 'mrr_pose'
 
 interface ChangeEntry {
   metric: string; old_val: number | null; new_val: number
@@ -22,7 +22,10 @@ interface KPIGlobal {
   total_kwc_poses: number; total_capex_poses: number
   moy_abonnement: number; moy_duree_contrat: number; moy_duree_f2: number
   mandats_signes: number; mandats_total: number
+  // MRR souscrit
   total_mrr: number; mrr_pro: number; mrr_part: number
+  // MRR posé
+  total_mrr_pose: number; mrr_pose_pro: number; mrr_pose_part: number
   par_segment: Record<string, number>
   capex_pro: number; capex_part: number
   kwc_pro: number; kwc_part: number
@@ -114,7 +117,7 @@ function StatBar({ title, data, total }: {
 }
 
 function SegmentBars({ g }: { g: KPIGlobal }) {
-  const pro  = g.par_segment['Pro']  || 0
+  const pro  = g.par_segment['Pro']         || 0
   const part = g.par_segment['Particulier'] || 0
   const total = pro + part || 1
 
@@ -146,6 +149,13 @@ function SegmentBars({ g }: { g: KPIGlobal }) {
       partVal: g.mrr_part, partFmt: fmtEurK(g.mrr_part),
       total: (g.mrr_pro + g.mrr_part) || 1,
       proColor: 'bg-emerald-600', partColor: 'bg-emerald-300', labelColor: 'text-emerald-600 font-semibold',
+    },
+    {
+      label: 'MRR posé HT',
+      proVal: g.mrr_pose_pro,   proFmt: fmtEurK(g.mrr_pose_pro),
+      partVal: g.mrr_pose_part, partFmt: fmtEurK(g.mrr_pose_part),
+      total: (g.mrr_pose_pro + g.mrr_pose_part) || 1,
+      proColor: 'bg-teal-600', partColor: 'bg-teal-300', labelColor: 'text-teal-600 font-semibold',
     },
   ]
 
@@ -304,7 +314,6 @@ function SellsySection({ data, loading }: { data: SellsyData | null; loading: bo
     </div>
   )
 
-  // Années extraites de paid (le plus complet)
   const annees = Array.from(
     new Set(data.paid.ca.monthly.map(r => r.month.slice(0, 4)))
   ).sort((a, b) => b.localeCompare(a))
@@ -313,7 +322,6 @@ function SellsySection({ data, loading }: { data: SellsyData | null; loading: bo
 
   return (
     <div className="space-y-4">
-      {/* Header : onglets + filtre année */}
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div className="flex border-b border-gray-100 gap-0">
           {SELLSY_TABS.map(t => (
@@ -436,12 +444,14 @@ export default function DashboardClient() {
 
   const tabs: { id: TabId; label: string }[] = [
     { id: 'signes',       label: '📝 Contrats signés' },
-    { id: 'poses',        label: '🔧 Poses (F2)' },
-    { id: 'capex_signes', label: '💶 CAPEX signé' },
-    { id: 'capex_poses',  label: '💰 CAPEX posé' },
-    { id: 'kwc',          label: '⚡ kWc' },
-    { id: 'duree_f2',     label: '⏱️ Durée F2' },
-    { id: 'mrr',          label: '📈 MRR' },
+    { id: 'poses',        label: '🔧 Poses (F2)'      },
+    { id: 'capex_signes', label: '💶 CAPEX signé'      },
+    { id: 'capex_poses',  label: '💰 CAPEX posé'       },
+    { id: 'kwc',          label: '⚡ kWc signé'        },
+    { id: 'kwc_poses',    label: '⚡ kWc posé'         },
+    { id: 'duree_f2',     label: '⏱️ Durée F2'         },
+    { id: 'mrr',          label: '📈 MRR souscrit'     },
+    { id: 'mrr_pose',     label: '✅ MRR posé'         },
   ]
 
   const g       = data?.global
@@ -537,30 +547,37 @@ export default function DashboardClient() {
 
         {!loading && !error && g && (
           <>
+            {/* ─── Ligne 1 : métriques de pose et signature ──────────────── */}
             <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-3">
               <KPICard label="Contrats signés"  value={g.total_signes}     icon="📝" />
               <KPICard label="Poses réalisées"   value={g.total_poses}      icon="🔧"
                 sub={`${Math.round(g.total_poses / Math.max(g.total_signes, 1) * 100)}% taux pose`} />
               <KPICard label="kWc signés"        value={g.total_kwc_signes} unit=" kWc" icon="⚡" decimals={2} />
-              <KPICard label="Mandats SEPA"      value={g.mandats_signes}   unit={`/${g.mandats_total}`} icon="🏦"
-                sub={`${Math.round(g.mandats_signes / Math.max(g.mandats_total, 1) * 100)}% signés`} />
+              <KPICard label="kWc posés"         value={g.total_kwc_poses}  unit=" kWc" icon="⚡" decimals={2}
+                sub={`${Math.round(g.total_kwc_poses / Math.max(g.total_kwc_signes, 1) * 100)}% installé`} />
             </div>
 
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-5">
+            {/* ─── Ligne 2 : financier ───────────────────────────────────── */}
+            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3 mb-5">
               <KPICard label="CAPEX signé"      value={g.total_capex_signes} icon="💶" currency />
               <KPICard label="CAPEX posé"       value={g.total_capex_poses}  icon="💰" currency />
               <KPICard label="Abo. moyen"       value={g.moy_abonnement}     icon="📊" currency />
+              <KPICard label="Mandats SEPA"     value={g.mandats_signes}     unit={`/${g.mandats_total}`} icon="🏦"
+                sub={`${Math.round(g.mandats_signes / Math.max(g.mandats_total, 1) * 100)}% signés`} />
               <KPICard label="MRR souscrit HT"  value={g.total_mrr}          icon="📈" currency highlight
                 sub={`${Math.round(g.total_mrr * 12 / 1000)}k€/an`} />
+              <KPICard label="MRR posé HT"      value={g.total_mrr_pose}     icon="✅" currency highlight
+                sub={`${Math.round(g.total_mrr_pose * 12 / 1000)}k€/an`} />
             </div>
 
+            {/* ─── Graphique mensuel ─────────────────────────────────────── */}
             <div className="bg-white rounded-xl border border-gray-100 shadow-sm mb-4">
               <div className="border-b border-gray-100 flex overflow-x-auto">
                 {tabs.map(t => (
                   <button key={t.id} onClick={() => setTab(t.id)}
                     className={`px-4 py-3 text-sm font-medium border-b-2 whitespace-nowrap transition-colors ${
                       tab === t.id
-                        ? t.id === 'mrr' ? 'border-emerald-500 text-emerald-600' : 'border-amber-500 text-amber-600'
+                        ? (t.id === 'mrr' || t.id === 'mrr_pose') ? 'border-emerald-500 text-emerald-600' : 'border-amber-500 text-amber-600'
                         : 'border-transparent text-gray-500 hover:text-gray-700'
                     }`}>
                     {t.label}
@@ -575,6 +592,7 @@ export default function DashboardClient() {
               </div>
             </div>
 
+            {/* ─── Répartitions ──────────────────────────────────────────── */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
               <SegmentBars g={g} />
               <StatBar title="Type d'installation"  data={g.par_type_install} total={g.total_signes} />
@@ -583,7 +601,7 @@ export default function DashboardClient() {
                 total={Object.values(g.par_statut).reduce((a, b) => a + b, 0)} />
             </div>
 
-            {/* ─── Section CA Sellsy ──────────────────────────────────────── */}
+            {/* ─── Section CA Sellsy ─────────────────────────────────────── */}
             <div className="bg-white rounded-xl border border-gray-100 shadow-sm mb-4">
               <div className="px-5 py-4 border-b border-gray-100">
                 <h2 className="font-semibold text-gray-900">💰 CA & Cautions — Sellsy</h2>
