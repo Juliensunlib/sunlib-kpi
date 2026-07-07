@@ -58,6 +58,8 @@ function isWithin30Days(dateStr: string): boolean {
 
 const F = {
   MOIS_SIGNATURE:    'fldk94N7n4aQW482K',
+  MOIS_SIGNATURE_PREVU: 'fldKe5WC67JAygPWV',
+  PCT_REUSSITE:      'fldbIyoDdMo5RaHdp',
   DATE_SIGNATURE:    'fldNyXyZv7xsbpVaV',
   DATE_CREATION:     'fldxygbu165RonF4P',
   DATE_EDITION:      'fldsjH7EmfCDgvF1t',
@@ -92,7 +94,7 @@ interface PipelineItem {
   id: string; nom_abonne: string; installateur: string; segment: string
   capex: number; kwc: number; date_creation: string; date_edition: string
   date_signature: string; signe: boolean; statut: string; statut_dossier: string
-  delai_creation_signature: number
+  delai_creation_signature: number; pct_reussite: string; mois_signature: string
 }
 
 interface PipelineRow {
@@ -206,6 +208,8 @@ function buildPipelineItems(recs: Rec[]): PipelineItem[] {
         statut:         selVal(r.fields[F.STATUT_ABONNE]),
         statut_dossier: selVal(r.fields[F.STATUT_DOSSIER]),
         delai_creation_signature: dateSig && dateCrea ? daysBetween(dateCrea, dateSig) : -1,
+        pct_reussite:   strVal(r.fields[F.PCT_REUSSITE]),
+        mois_signature: strVal(r.fields[F.MOIS_SIGNATURE_PREVU]),
       }
     })
     .sort((a, b) => b.date_edition.localeCompare(a.date_edition))

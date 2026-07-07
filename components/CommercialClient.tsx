@@ -3,7 +3,7 @@ import { useState, useEffect, useMemo } from 'react'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 interface MonthlyRow { month: string; label: string; signes: number; annules: number; capex: number; kwc: number; poses: number }
-interface PipelineItem { id: string; nom_abonne: string; installateur: string; segment: string; capex: number; kwc: number; date_creation: string; date_edition: string; date_signature: string; signe: boolean; statut: string; statut_dossier: string; delai_creation_signature: number }
+interface PipelineItem { id: string; nom_abonne: string; installateur: string; segment: string; capex: number; kwc: number; date_creation: string; date_edition: string; date_signature: string; signe: boolean; statut: string; statut_dossier: string; delai_creation_signature: number; pct_reussite: string; mois_signature: string }
 interface PipelineRow { nom: string; total_pipe: number; signes_pipe: number; en_cours_pipe: number; taux_conversion: number; capex_pipe: number; kwc_pipe: number; capex_signe: number; kwc_signe: number; capex_en_cours: number; kwc_en_cours: number; delai_moy: number; items: PipelineItem[] }
 interface InstRow { nom: string; signes: number; annules: number; taux_annulation: number; capex: number; kwc: number; poses: number; taux_pose: number; duree_f2_moy: number; delai_moy_creation_signature: number; monthly: MonthlyRow[] }
 interface ComRow { nom: string; signes: number; annules: number; taux_annulation: number; capex: number; kwc: number; poses: number; taux_pose: number; abo_moyen: number; duree_f2_moy: number; tendance_signes: number; tendance_capex: number; delai_moy_creation_signature: number; monthly: MonthlyRow[]; installateurs: InstRow[] }
@@ -33,7 +33,7 @@ const fmtDate = (s: string) => { if (!s) return '—'; try { return new Date(s).
 
 // ─── Match nom flexible ───────────────────────────────────────────────────────
 function normalize(s: string): string {
-  return s.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9\s]/g, '').trim()
+  return s.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9\s]/g, '').trim()
 }
 function matchNom(comNom: string, objNom: string): boolean {
   const a = normalize(comNom).split(/\s+/).filter(w => w.length > 2)
@@ -240,7 +240,7 @@ function ObjectifsView({ data, objectifs, anneeFilter }: { data: ApiData; object
 
 // ─── Vue Dossiers Soumis ──────────────────────────────────────────────────────
 const PCT_OPTIONS  = ['', '0%', '25%', '50%', '75%', '100%']
-const MOIS_OPTIONS = ['', 'Janvier', 'Février', 'Mars', 'Avril', 'Mai', 'Juin', 'Juillet', 'Aout', 'Septembre', 'Octobre', 'Décembre']
+const MOIS_OPTIONS = ['', 'Janvier', 'Février', 'Mars', 'Avril', 'Mai', 'Juin', 'Juillet', 'Aout', 'Septembre', 'Octobre', 'Novembre', 'Décembre']
 
 const PCT_BADGES = [
   { pct: '',     label: 'N/A',  color: 'text-gray-500 bg-gray-100'      },
@@ -513,13 +513,18 @@ function DossiersSoumisView({ dossiers, loading, onMount, onUpdate }: {
 }
 
 // ─── Panneau Pipeline ─────────────────────────────────────────────────────────
-function PipelinePanel({ pipe, onClose }: { pipe: PipelineRow; onClose: () => void }) {
+function PipelinePanel({ pipe, onClose, onUpdate }: {
+  pipe: PipelineRow
+  onClose: () => void
+  onUpdate: (id: string, pct?: string, mois?: string, statut?: string) => void
+}) {
   const [tab, setTab] = useState<'tous' | 'signes' | 'en_cours'>('en_cours')
   const items = pipe.items.filter(i => tab === 'tous' ? true : tab === 'signes' ? i.signe : !i.signe)
+  const editable = tab === 'en_cours'
   return (
     <div className="fixed inset-0 z-30 flex">
       <div className="flex-1 bg-black/20 backdrop-blur-sm" onClick={onClose} />
-      <div className="w-full max-w-2xl bg-white shadow-2xl flex flex-col overflow-hidden">
+      <div className="w-full max-w-4xl bg-white shadow-2xl flex flex-col overflow-hidden">
         <div className="bg-gradient-to-r from-indigo-600 to-indigo-700 p-5 text-white">
           <div className="flex items-center justify-between mb-4">
             <div className="flex items-center gap-3"><Avatar nom={pipe.nom} size={12} /><div><h2 className="text-xl font-bold">{pipe.nom}</h2><p className="text-indigo-200 text-sm">Pipeline 30 jours glissants</p></div></div>
@@ -543,6 +548,11 @@ function PipelinePanel({ pipe, onClose }: { pipe: PipelineRow; onClose: () => vo
             <button key={id} onClick={() => setTab(id as 'tous' | 'signes' | 'en_cours')} className={`px-4 py-2.5 text-sm border-b-2 transition-colors ${tab === id ? 'border-indigo-500 text-indigo-600 font-medium' : 'border-transparent text-gray-500 hover:text-gray-700'}`}>{label}</button>
           ))}
         </div>
+        {editable && (
+          <p className="px-5 py-2 text-xs text-gray-400 bg-gray-50 border-b border-gray-100">
+            % réussite, mois de signature et statut éditables directement pour les dossiers vraiment en cours (sans statut renseigné)
+          </p>
+        )}
         <div className="flex-1 overflow-y-auto">
           <table className="w-full text-sm">
             <thead className="bg-gray-50 border-b border-gray-100 sticky top-0">
@@ -552,7 +562,15 @@ function PipelinePanel({ pipe, onClose }: { pipe: PipelineRow; onClose: () => vo
                 <th className="px-3 py-2 text-right text-xs font-semibold text-gray-500">CAPEX</th>
                 <th className="px-3 py-2 text-center text-xs font-semibold text-gray-500">Création</th>
                 <th className="px-3 py-2 text-center text-xs font-semibold text-gray-500">Édition</th>
-                <th className="px-3 py-2 text-center text-xs font-semibold text-gray-500">Statut</th>
+                {editable ? (
+                  <>
+                    <th className="px-3 py-2 text-center text-xs font-semibold text-gray-500 bg-amber-50">% Réussite</th>
+                    <th className="px-3 py-2 text-center text-xs font-semibold text-gray-500 bg-blue-50">Mois signature</th>
+                    <th className="px-3 py-2 text-center text-xs font-semibold text-gray-500 bg-red-50">Statut</th>
+                  </>
+                ) : (
+                  <th className="px-3 py-2 text-center text-xs font-semibold text-gray-500">Statut</th>
+                )}
                 <th className="px-3 py-2 text-center text-xs font-semibold text-gray-500">Délai</th>
               </tr>
             </thead>
@@ -564,11 +582,45 @@ function PipelinePanel({ pipe, onClose }: { pipe: PipelineRow; onClose: () => vo
                   <td className="px-3 py-2.5 text-right font-medium text-gray-700 whitespace-nowrap">{fmtK(item.capex)}</td>
                   <td className="px-3 py-2.5 text-center text-xs text-gray-500">{fmtDate(item.date_creation)}</td>
                   <td className="px-3 py-2.5 text-center text-xs text-gray-500">{fmtDate(item.date_edition)}</td>
-                  <td className="px-3 py-2.5 text-center">{item.signe ? <span className="text-xs bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded-full font-medium">✓ Signé</span> : <span className="text-xs bg-orange-100 text-orange-700 px-1.5 py-0.5 rounded-full font-medium">À signer</span>}</td>
+                  {editable && item.statut === '' ? (
+                    <>
+                      <td className="px-3 py-2.5 text-center bg-amber-50/50">
+                        <select value={item.pct_reussite} onChange={e => onUpdate(item.id, e.target.value, undefined, undefined)}
+                          className={`text-xs font-semibold px-2 py-1 rounded-lg border-0 cursor-pointer focus:ring-2 focus:ring-amber-300 ${pctBadgeColor(item.pct_reussite)}`}>
+                          {PCT_OPTIONS.map(o => <option key={o} value={o}>{o || '—'}</option>)}
+                        </select>
+                      </td>
+                      <td className="px-3 py-2.5 text-center bg-blue-50/50">
+                        <select value={item.mois_signature} onChange={e => onUpdate(item.id, undefined, e.target.value, undefined)}
+                          className="text-xs text-blue-700 bg-blue-50 px-2 py-1 rounded-lg border-0 cursor-pointer focus:ring-2 focus:ring-blue-300">
+                          {MOIS_OPTIONS.map(o => <option key={o} value={o}>{o || '—'}</option>)}
+                        </select>
+                      </td>
+                      <td className="px-3 py-2.5 text-center bg-red-50/50">
+                        <select value={item.statut} onChange={e => onUpdate(item.id, undefined, undefined, e.target.value)}
+                          className="text-xs font-semibold px-2 py-1 rounded-lg border-0 cursor-pointer focus:ring-2 focus:ring-red-300 text-gray-400 bg-gray-50">
+                          <option value="">—</option>
+                          <option value="Annulé">Annulé</option>
+                          <option value="Repris">Repris</option>
+                          <option value="Refusé">Refusé</option>
+                        </select>
+                      </td>
+                    </>
+                  ) : editable ? (
+                    <td colSpan={3} className="px-3 py-2.5 text-center">
+                      <span className={`text-xs px-1.5 py-0.5 rounded-full font-medium ${
+                        item.statut === 'Annulé' ? 'text-red-600 bg-red-50' :
+                        item.statut === 'Refusé' ? 'text-orange-600 bg-orange-50' :
+                        'text-emerald-600 bg-emerald-50'
+                      }`}>{item.statut}</span>
+                    </td>
+                  ) : (
+                    <td className="px-3 py-2.5 text-center">{item.signe ? <span className="text-xs bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded-full font-medium">✓ Signé</span> : <span className="text-xs bg-orange-100 text-orange-700 px-1.5 py-0.5 rounded-full font-medium">À signer</span>}</td>
+                  )}
                   <td className="px-3 py-2.5 text-center text-xs text-gray-500">{item.delai_creation_signature >= 0 ? `${item.delai_creation_signature}j` : '—'}</td>
                 </tr>
               ))}
-              {items.length === 0 && <tr><td colSpan={7} className="px-3 py-8 text-center text-gray-400 text-sm">Aucun dossier</td></tr>}
+              {items.length === 0 && <tr><td colSpan={editable ? 9 : 7} className="px-3 py-8 text-center text-gray-400 text-sm">Aucun dossier</td></tr>}
             </tbody>
           </table>
         </div>
@@ -681,7 +733,7 @@ export default function CommercialClient() {
   const [mois, setMois]            = useState('')
   const [view, setView]            = useState<ViewType>('leaderboard')
   const [selCom, setSelCom]        = useState<ComRow | null>(null)
-  const [selPipe, setSelPipe]      = useState<PipelineRow | null>(null)
+  const [selPipeNom, setSelPipeNom] = useState<string | null>(null)
   const [search, setSearch]        = useState('')
   const [role, setRole]            = useState('')
   const [objectifs, setObjectifs]  = useState<Objectifs>({})
@@ -725,6 +777,21 @@ export default function CommercialClient() {
         ...(mois_signature !== undefined ? { mois_signature }  : {}),
       } : d))
     }
+    setData(prev => {
+      if (!prev) return prev
+      return {
+        ...prev,
+        pipeline_par_commercial: prev.pipeline_par_commercial.map(p => ({
+          ...p,
+          items: p.items.map(i => i.id === recordId ? {
+            ...i,
+            ...(pct_reussite   !== undefined ? { pct_reussite }   : {}),
+            ...(mois_signature !== undefined ? { mois_signature } : {}),
+            ...(statut_abonne  !== undefined ? { statut: statut_abonne } : {}),
+          } : i),
+        })),
+      }
+    })
   }
 
   useEffect(() => { load('', '') }, [])
@@ -732,6 +799,7 @@ export default function CommercialClient() {
   const comItems  = useMemo(() => (data?.par_commercial  || []) as unknown as Record<string, unknown>[], [data])
   const instItems = useMemo(() => (data?.par_installateur || []) as unknown as Record<string, unknown>[], [data])
   const pipeItems = useMemo(() => (data?.pipeline_par_commercial || []) as unknown as Record<string, unknown>[], [data])
+  const selPipe   = useMemo(() => selPipeNom ? (data?.pipeline_par_commercial.find(p => p.nom === selPipeNom) || null) : null, [selPipeNom, data])
 
   const comSort  = useSort(comItems,  'capex')
   const instSort = useSort(instItems, 'signes')
@@ -791,7 +859,7 @@ export default function CommercialClient() {
       </header>
 
       {selCom  && data && <ComPanel com={selCom} months={data.months} onClose={() => setSelCom(null)} />}
-      {selPipe && data && <PipelinePanel pipe={selPipe} onClose={() => setSelPipe(null)} />}
+      {selPipe && data && <PipelinePanel pipe={selPipe} onClose={() => setSelPipeNom(null)} onUpdate={updateDossier} />}
 
       <main className="max-w-screen-2xl mx-auto px-4 py-5 space-y-4">
         {view === 'dossiers' && (
@@ -908,7 +976,7 @@ export default function CommercialClient() {
                       </thead>
                       <tbody className="divide-y divide-gray-50">
                         {(pipeSort.sorted as unknown as PipelineRow[]).map((pipe, i) => (
-                          <tr key={pipe.nom} onClick={() => setSelPipe(pipe)} className="hover:bg-indigo-50 cursor-pointer transition-colors">
+                          <tr key={pipe.nom} onClick={() => setSelPipeNom(pipe.nom)} className="hover:bg-indigo-50 cursor-pointer transition-colors">
                             <td className="px-4 py-3 text-gray-400 text-xs">{i + 1}</td>
                             <td className="px-4 py-3"><div className="flex items-center gap-2"><Avatar nom={pipe.nom} size={8} /><span className="font-medium text-gray-900 text-sm">{pipe.nom}</span></div></td>
                             <td className="px-4 py-3"><PctBarCount v={pipe.en_cours_pipe} max={maxPipe} color="bg-orange-400" /></td>
