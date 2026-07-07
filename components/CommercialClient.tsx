@@ -1,5 +1,9 @@
 'use client'
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, type ReactNode } from 'react'
+import {
+  IconUsers, IconLogOut, IconArrowLeft, IconX, IconTrophy, IconTarget,
+  IconGrid, IconHammer, IconClipboardList, IconLoader, IconRefresh,
+} from './icons'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 interface MonthlyRow { month: string; label: string; signes: number; annules: number; capex: number; kwc: number; poses: number }
@@ -33,7 +37,7 @@ const fmtDate = (s: string) => { if (!s) return '—'; try { return new Date(s).
 
 // ─── Match nom flexible ───────────────────────────────────────────────────────
 function normalize(s: string): string {
-  return s.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9\s]/g, '').trim()
+  return s.toLowerCase().normalize('NFD').replace(/\p{Diacritic}/gu, '').replace(/[^a-z0-9\s]/g, '').trim()
 }
 function matchNom(comNom: string, objNom: string): boolean {
   const a = normalize(comNom).split(/\s+/).filter(w => w.length > 2)
@@ -67,52 +71,52 @@ function useSort(items: Record<string, unknown>[], def: string) {
 function Th({ label, k, col, dir, onSort }: { label: string; k: string; col: string; dir: SortDir; onSort: (k: string) => void }) {
   const active = k === col
   return (
-    <th onClick={() => onSort(k)} className="px-3 py-2.5 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide cursor-pointer select-none hover:text-gray-800 whitespace-nowrap">
-      <span className="flex items-center gap-1">{label}<span className={`text-xs ${active ? 'text-amber-500' : 'text-gray-300'}`}>{active ? (dir === 'desc' ? '↓' : '↑') : '↕'}</span></span>
+    <th onClick={() => onSort(k)} className="px-3 py-2.5 text-left text-xs font-semibold text-muted uppercase tracking-wide cursor-pointer select-none hover:text-ink whitespace-nowrap">
+      <span className="flex items-center gap-1">{label}<span className={`text-xs ${active ? 'text-teal' : 'text-muted'}`}>{active ? (dir === 'desc' ? '↓' : '↑') : '↕'}</span></span>
     </th>
   )
 }
-function MiniBar({ v, max, color = 'bg-amber-400' }: { v: number; max: number; color?: string }) {
+function MiniBar({ v, max, color = 'bg-teal' }: { v: number; max: number; color?: string }) {
   const pct = max ? Math.min(Math.round(v / max * 100), 100) : 0
-  return <div className="w-full h-1 bg-gray-100 rounded-full mt-1"><div className={`h-1 rounded-full ${color}`} style={{ width: `${pct}%` }} /></div>
+  return <div className="w-full h-1 bg-line rounded-full mt-1"><div className={`h-1 rounded-full ${color}`} style={{ width: `${pct}%` }} /></div>
 }
-function PctBarCount({ v, max, color = 'bg-blue-400' }: { v: number; max: number; color?: string }) {
+function PctBarCount({ v, max, color = 'bg-teal' }: { v: number; max: number; color?: string }) {
   const pct = max ? Math.min(Math.round(v / max * 100), 100) : 0
   return (
     <div className="flex items-center gap-2">
-      <span className="text-sm font-medium text-gray-800 w-6 text-right">{v}</span>
-      <div className="flex-1 h-1.5 bg-gray-100 rounded-full" style={{ minWidth: 40 }}>
+      <span className="text-sm font-medium text-ink w-6 text-right">{v}</span>
+      <div className="flex-1 h-1.5 bg-line rounded-full" style={{ minWidth: 40 }}>
         <div className={`h-1.5 rounded-full ${color}`} style={{ width: `${pct}%` }} />
       </div>
     </div>
   )
 }
 function TauxPose({ v }: { v: number }) {
-  const cls = v >= 70 ? 'text-emerald-600' : v >= 40 ? 'text-amber-600' : 'text-gray-400'
+  const cls = v >= 70 ? 'text-brandgreen' : v >= 40 ? 'text-semamber' : 'text-muted'
   return <span className={`text-sm font-semibold ${cls}`}>{v}%</span>
 }
 function Medal({ rank }: { rank: number }) {
-  if (rank === 1) return <span>🥇</span>; if (rank === 2) return <span>🥈</span>; if (rank === 3) return <span>🥉</span>
-  return <span className="text-xs text-gray-400 font-bold">#{rank}</span>
+  if (rank <= 3) return <IconTrophy size={14} className={rank === 1 ? 'text-semamber' : rank === 2 ? 'text-muted' : 'text-teal'} />
+  return <span className="text-xs text-muted font-bold">#{rank}</span>
 }
 function Trend({ v }: { v: number }) {
-  if (v === 0) return <span className="text-gray-300 text-xs">—</span>
-  return <span className={`text-xs font-semibold ${v > 0 ? 'text-emerald-600' : 'text-red-500'}`}>{v > 0 ? '↑' : '↓'} {Math.abs(v)}</span>
+  if (v === 0) return <span className="text-muted text-xs">—</span>
+  return <span className={`text-xs font-semibold ${v > 0 ? 'text-brandgreen' : 'text-semred'}`}>{v > 0 ? '↑' : '↓'} {Math.abs(v)}</span>
 }
-function Sparkline({ data, color = '#f59e0b' }: { data: number[]; color?: string }) {
-  if (!data.length || data.every(d => d === 0)) return <span className="text-gray-200 text-xs">—</span>
+function Sparkline({ data, color = '#0EA3B4' }: { data: number[]; color?: string }) {
+  if (!data.length || data.every(d => d === 0)) return <span className="text-muted text-xs">—</span>
   const W = 72, H = 24, max = Math.max(...data, 1)
   const pts = data.map((v, i) => { const x = data.length < 2 ? W / 2 : (i / (data.length - 1)) * W; const y = H - (v / max) * (H - 4) - 2; return `${x},${y}` }).join(' ')
   const last = data[data.length - 1], prev = data.length > 1 ? data[data.length - 2] : last
-  const dot = last >= prev ? '#10b981' : '#ef4444'
+  const dot = last >= prev ? '#3CAE68' : '#B91C1C'
   const lx = data.length < 2 ? W / 2 : W, ly = H - (last / max) * (H - 4) - 2
   return <svg width={W} height={H} viewBox={`0 0 ${W} ${H}`} className="overflow-visible"><polyline fill="none" stroke={color} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" points={pts} opacity="0.35" /><circle cx={lx} cy={ly} r="2.5" fill={dot} /></svg>
 }
 function HeatCell({ v, max, onClick, selected = false }: { v: number; max: number; onClick?: () => void; selected?: boolean }) {
   const pct = max ? v / max : 0
-  const bg = v === 0 ? 'bg-gray-100' : pct < 0.2 ? 'bg-amber-100' : pct < 0.4 ? 'bg-amber-200' : pct < 0.6 ? 'bg-amber-300' : pct < 0.8 ? 'bg-amber-400' : 'bg-amber-500'
-  const tc = pct > 0.6 ? 'text-white' : 'text-gray-700'
-  return <div onClick={onClick} title={`${v}`} className={`${bg} ${tc} text-xs font-medium flex items-center justify-center rounded cursor-pointer hover:opacity-80 transition-all ${selected ? 'ring-2 ring-blue-500 ring-offset-1' : ''}`} style={{ minWidth: 32, height: 28 }}>{v > 0 ? v : ''}</div>
+  const bg = v === 0 ? 'bg-line' : pct < 0.2 ? 'bg-teal/20' : pct < 0.4 ? 'bg-teal/40' : pct < 0.6 ? 'bg-teal/60' : pct < 0.8 ? 'bg-teal/80' : 'bg-teal'
+  const tc = pct > 0.6 ? 'text-white' : 'text-ink'
+  return <div onClick={onClick} title={`${v}`} className={`${bg} ${tc} text-xs font-medium flex items-center justify-center rounded cursor-pointer hover:opacity-80 transition-all ${selected ? 'ring-2 ring-teal ring-offset-1' : ''}`} style={{ minWidth: 32, height: 28 }}>{v > 0 ? v : ''}</div>
 }
 function BarChart({ data, months }: { data: MonthlyRow[]; months: string[] }) {
   const maxV = Math.max(...data.map(d => d.signes + d.annules), 1)
@@ -124,11 +128,11 @@ function BarChart({ data, months }: { data: MonthlyRow[]; months: string[] }) {
         return (
           <div key={m} className="flex-1 flex flex-col items-center gap-0.5">
             <div className="w-full flex flex-col justify-end relative" style={{ height: 108 }}>
-              {total > 0 && <span className="absolute w-full text-center font-semibold text-gray-600" style={{ fontSize: 9, top: -13 }}>{total}</span>}
-              {a > 0 && <div className="w-full bg-red-300 rounded-t-sm" style={{ height: Math.round((a / maxV) * 108) }} />}
-              {s > 0 && <div className="w-full bg-amber-400 rounded-t-sm" style={{ height: Math.round((s / maxV) * 108) }} />}
+              {total > 0 && <span className="absolute w-full text-center font-semibold text-muted" style={{ fontSize: 9, top: -13 }}>{total}</span>}
+              {a > 0 && <div className="w-full bg-semred rounded-t-sm" style={{ height: Math.round((a / maxV) * 108) }} />}
+              {s > 0 && <div className="w-full bg-teal rounded-t-sm" style={{ height: Math.round((s / maxV) * 108) }} />}
             </div>
-            <span className="text-gray-400 text-center w-full truncate" style={{ fontSize: 9 }}>{d?.label || m.slice(5)}</span>
+            <span className="text-muted text-center w-full truncate" style={{ fontSize: 9 }}>{d?.label || m.slice(5)}</span>
           </div>
         )
       })}
@@ -173,62 +177,62 @@ function ObjectifsView({ data, objectifs, anneeFilter }: { data: ApiData; object
   const grandRealTotal = colTotaux.reduce((s, c) => s + c.realTotal, 0)
   const grandObjTotal  = colTotaux.reduce((s, c) => s + c.objTotal, 0)
   const grandPct       = grandObjTotal > 0 ? Math.round(grandRealTotal / grandObjTotal * 100) : null
-  const pctColor = (pct: number | null) => { if (pct === null) return 'text-gray-400'; if (pct >= 100) return 'text-emerald-600'; if (pct >= 70) return 'text-orange-500'; return 'text-red-500' }
-  const pctBg = (pct: number | null, isPast: boolean) => { if (!isPast || pct === null) return ''; if (pct >= 100) return 'bg-emerald-50'; if (pct >= 70) return 'bg-orange-50'; return 'bg-red-50' }
+  const pctColor = (pct: number | null) => { if (pct === null) return 'text-muted'; if (pct >= 100) return 'text-brandgreen'; if (pct >= 70) return 'text-semamber'; return 'text-semred' }
+  const pctBg = (pct: number | null, isPast: boolean) => { if (!isPast || pct === null) return ''; if (pct >= 100) return 'bg-brandgreen-soft'; if (pct >= 70) return 'bg-semamber-bg'; return 'bg-semred-bg' }
   return (
-    <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
-      <div className="px-5 py-4 border-b border-gray-100">
+    <div className="bg-surface rounded-card border border-line shadow-sm overflow-hidden">
+      <div className="px-5 py-4 border-b border-line">
         <div className="flex items-center justify-between">
-          <div><h2 className="font-semibold text-gray-900">🎯 Suivi des objectifs CAPEX {annee}</h2><p className="text-xs text-gray-400 mt-0.5">Réalisé vs objectif mensuel · Modifiables dans <code className="bg-gray-100 px-1 rounded">data/objectifs.json</code></p></div>
-          <div className="flex items-center gap-2 text-xs text-gray-500">
-            <span className="flex items-center gap-1"><span className="w-3 h-3 rounded bg-emerald-100 inline-block" /> ≥100%</span>
-            <span className="flex items-center gap-1"><span className="w-3 h-3 rounded bg-orange-100 inline-block" /> 70-99%</span>
-            <span className="flex items-center gap-1"><span className="w-3 h-3 rounded bg-red-100 inline-block" /> &lt;70%</span>
+          <div className="flex items-center gap-2"><IconTarget size={18} className="text-muted" /><div><h2 className="font-bold text-ink">Suivi des objectifs CAPEX {annee}</h2><p className="text-xs text-muted mt-0.5">Réalisé vs objectif mensuel · Modifiables dans <code className="bg-line px-1 rounded">data/objectifs.json</code></p></div></div>
+          <div className="flex items-center gap-2 text-xs text-muted">
+            <span className="flex items-center gap-1"><span className="w-3 h-3 rounded bg-brandgreen-soft inline-block" /> ≥100%</span>
+            <span className="flex items-center gap-1"><span className="w-3 h-3 rounded bg-semamber-bg inline-block" /> 70-99%</span>
+            <span className="flex items-center gap-1"><span className="w-3 h-3 rounded bg-semred-bg inline-block" /> &lt;70%</span>
           </div>
         </div>
       </div>
       <div className="overflow-x-auto">
         <table className="w-full text-xs border-collapse">
-          <thead className="bg-gray-50 border-b border-gray-200">
+          <thead className="bg-canvas border-b border-line">
             <tr>
-              <th className="px-3 py-3 text-left font-semibold text-gray-600 sticky left-0 bg-gray-50 z-10" style={{ minWidth: 160 }}>Commercial</th>
-              {mois.map(mm => (<th key={mm} className={`px-2 py-3 text-center font-semibold ${mm === currentMM ? 'text-blue-600 bg-blue-50' : 'text-gray-500'}`} style={{ minWidth: 80 }}>{MOIS_LABELS[mm]}{mm === currentMM && <span className="ml-1 text-blue-400">●</span>}</th>))}
-              <th className="px-3 py-3 text-center font-semibold text-gray-700 bg-gray-100" style={{ minWidth: 110 }}>Total annuel</th>
+              <th className="px-3 py-3 text-left font-semibold text-muted sticky left-0 bg-canvas z-10" style={{ minWidth: 160 }}>Commercial</th>
+              {mois.map(mm => (<th key={mm} className={`px-2 py-3 text-center font-semibold ${mm === currentMM ? 'text-teal-ink bg-teal-soft' : 'text-muted'}`} style={{ minWidth: 80 }}>{MOIS_LABELS[mm]}{mm === currentMM && <span className="ml-1 text-teal">●</span>}</th>))}
+              <th className="px-3 py-3 text-center font-semibold text-ink bg-line" style={{ minWidth: 110 }}>Total annuel</th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-gray-100">
+          <tbody className="divide-y divide-line">
             {rows.map(({ com, moisData, totalRealise, totalObjectif, totalPct }) => (
-              <tr key={com.nom} className="hover:bg-gray-50 transition-colors">
-                <td className="px-3 py-2.5 sticky left-0 bg-white z-10 border-r border-gray-100"><div className="flex items-center gap-2"><Avatar nom={com.nom} size={6} /><span className="font-medium text-gray-800 truncate" style={{ maxWidth: 120 }}>{com.nom}</span></div></td>
+              <tr key={com.nom} className="hover:bg-canvas transition-colors">
+                <td className="px-3 py-2.5 sticky left-0 bg-surface z-10 border-r border-line"><div className="flex items-center gap-2"><Avatar nom={com.nom} size={6} /><span className="font-medium text-ink truncate" style={{ maxWidth: 120 }}>{com.nom}</span></div></td>
                 {moisData.map(({ mm, realise, objectif, pct, isPast }) => (
-                  <td key={mm} className={`px-2 py-2 text-center ${pctBg(pct, isPast)} ${mm === currentMM ? 'ring-1 ring-inset ring-blue-200' : ''}`}>
+                  <td key={mm} className={`px-2 py-2 text-center ${pctBg(pct, isPast)} ${mm === currentMM ? 'ring-1 ring-inset ring-teal-soft' : ''}`}>
                     {objectif !== null && objectif > 0 ? (
-                      <div><div className={`font-bold ${pctColor(pct)}`}>{pct !== null ? `${pct}%` : '—'}</div><div className="text-gray-600 mt-0.5">{fmtK(realise)}</div><div className="text-gray-400">{fmtK(objectif)}</div>
-                        {isPast && pct !== null && (<div className="mt-1 h-0.5 bg-gray-200 rounded-full"><div className={`h-0.5 rounded-full ${pct >= 100 ? 'bg-emerald-500' : pct >= 70 ? 'bg-orange-400' : 'bg-red-400'}`} style={{ width: `${Math.min(pct, 100)}%` }} /></div>)}
+                      <div><div className={`font-bold ${pctColor(pct)}`}>{pct !== null ? `${pct}%` : '—'}</div><div className="text-muted mt-0.5">{fmtK(realise)}</div><div className="text-muted">{fmtK(objectif)}</div>
+                        {isPast && pct !== null && (<div className="mt-1 h-0.5 bg-line rounded-full"><div className={`h-0.5 rounded-full ${pct >= 100 ? 'bg-brandgreen' : pct >= 70 ? 'bg-semamber' : 'bg-semred'}`} style={{ width: `${Math.min(pct, 100)}%` }} /></div>)}
                       </div>
-                    ) : (<div>{realise > 0 ? <div className="text-gray-600 font-medium">{fmtK(realise)}</div> : <span className="text-gray-300">—</span>}<div className="text-gray-300 text-xs">pas d'obj.</div></div>)}
+                    ) : (<div>{realise > 0 ? <div className="text-muted font-medium">{fmtK(realise)}</div> : <span className="text-muted">—</span>}<div className="text-muted text-xs">pas d'obj.</div></div>)}
                   </td>
                 ))}
-                <td className="px-3 py-2.5 text-center bg-gray-50 font-semibold border-l border-gray-200">
-                  {totalObjectif !== null ? (<div><div className={`text-sm font-bold ${pctColor(totalPct)}`}>{totalPct !== null ? `${totalPct}%` : '—'}</div><div className="text-gray-700 text-xs">{fmtK(totalRealise)}</div><div className="text-gray-400 text-xs">{fmtK(totalObjectif)}</div></div>) : <span className="text-gray-400 text-xs">{fmtK(totalRealise)}</span>}
+                <td className="px-3 py-2.5 text-center bg-canvas font-semibold border-l border-line">
+                  {totalObjectif !== null ? (<div><div className={`text-sm font-bold ${pctColor(totalPct)}`}>{totalPct !== null ? `${totalPct}%` : '—'}</div><div className="text-ink text-xs">{fmtK(totalRealise)}</div><div className="text-muted text-xs">{fmtK(totalObjectif)}</div></div>) : <span className="text-muted text-xs">{fmtK(totalRealise)}</span>}
                 </td>
               </tr>
             ))}
           </tbody>
-          <tfoot className="border-t-2 border-gray-300">
-            <tr className="bg-gray-100">
-              <td className="px-3 py-2.5 font-bold text-gray-700 sticky left-0 bg-gray-100 z-10 border-r border-gray-200">TOTAL ÉQUIPE</td>
+          <tfoot className="border-t-2 border-line">
+            <tr className="bg-line">
+              <td className="px-3 py-2.5 font-bold text-ink sticky left-0 bg-line z-10 border-r border-line">TOTAL ÉQUIPE</td>
               {colTotaux.map(({ mm, realTotal, objTotal, pct }) => (
-                <td key={mm} className={`px-2 py-2.5 text-center ${mm === currentMM ? 'bg-blue-50' : ''}`}>
+                <td key={mm} className={`px-2 py-2.5 text-center ${mm === currentMM ? 'bg-teal-soft' : ''}`}>
                   <div className={`font-bold ${pctColor(pct)}`}>{pct !== null ? `${pct}%` : '—'}</div>
-                  <div className="text-gray-700 text-xs">{fmtK(realTotal)}</div>
-                  {objTotal > 0 && <div className="text-gray-500 text-xs">{fmtK(objTotal)}</div>}
+                  <div className="text-ink text-xs">{fmtK(realTotal)}</div>
+                  {objTotal > 0 && <div className="text-muted text-xs">{fmtK(objTotal)}</div>}
                 </td>
               ))}
-              <td className="px-3 py-2.5 text-center bg-gray-200 font-bold border-l border-gray-300">
+              <td className="px-3 py-2.5 text-center bg-line font-bold border-l border-line">
                 <div className={`text-sm font-bold ${pctColor(grandPct)}`}>{grandPct !== null ? `${grandPct}%` : '—'}</div>
-                <div className="text-gray-700 text-xs">{fmtK(grandRealTotal)}</div>
-                {grandObjTotal > 0 && <div className="text-gray-500 text-xs">{fmtK(grandObjTotal)}</div>}
+                <div className="text-ink text-xs">{fmtK(grandRealTotal)}</div>
+                {grandObjTotal > 0 && <div className="text-muted text-xs">{fmtK(grandObjTotal)}</div>}
               </td>
             </tr>
           </tfoot>
@@ -243,19 +247,19 @@ const PCT_OPTIONS  = ['', '0%', '25%', '50%', '75%', '100%']
 const MOIS_OPTIONS = ['', 'Janvier', 'Février', 'Mars', 'Avril', 'Mai', 'Juin', 'Juillet', 'Aout', 'Septembre', 'Octobre', 'Novembre', 'Décembre']
 
 const PCT_BADGES = [
-  { pct: '',     label: 'N/A',  color: 'text-gray-500 bg-gray-100'      },
-  { pct: '0%',   label: '0%',   color: 'text-red-500 bg-red-50'         },
-  { pct: '25%',  label: '25%',  color: 'text-red-400 bg-red-50'         },
-  { pct: '50%',  label: '50%',  color: 'text-orange-500 bg-orange-50'   },
-  { pct: '75%',  label: '75%',  color: 'text-orange-500 bg-orange-50'   },
-  { pct: '100%', label: '100%', color: 'text-emerald-600 bg-emerald-50' },
+  { pct: '',     label: 'N/A',  color: 'text-muted bg-line'           },
+  { pct: '0%',   label: '0%',   color: 'text-semred bg-semred-bg'     },
+  { pct: '25%',  label: '25%',  color: 'text-semred bg-semred-bg'     },
+  { pct: '50%',  label: '50%',  color: 'text-semamber bg-semamber-bg' },
+  { pct: '75%',  label: '75%',  color: 'text-semamber bg-semamber-bg' },
+  { pct: '100%', label: '100%', color: 'text-brandgreen bg-brandgreen-soft' },
 ]
 
 function pctBadgeColor(pct: string) {
-  if (pct === '100%') return 'text-emerald-600 bg-emerald-50'
-  if (pct === '75%' || pct === '50%') return 'text-orange-500 bg-orange-50'
-  if (pct === '25%' || pct === '0%') return 'text-red-500 bg-red-50'
-  return 'text-gray-400 bg-gray-50'
+  if (pct === '100%') return 'text-brandgreen bg-brandgreen-soft'
+  if (pct === '75%' || pct === '50%') return 'text-semamber bg-semamber-bg'
+  if (pct === '25%' || pct === '0%') return 'text-semred bg-semred-bg'
+  return 'text-muted bg-canvas'
 }
 
 function DossiersSoumisView({ dossiers, loading, onMount, onUpdate }: {
@@ -284,8 +288,8 @@ function DossiersSoumisView({ dossiers, loading, onMount, onUpdate }: {
   }
 
   const sortIcon = (col: SortColInner) => {
-    if (col !== sortCol) return <span className="text-gray-300 ml-0.5">↕</span>
-    return <span className="text-amber-500 ml-0.5">{sortDir === 'desc' ? '↓' : '↑'}</span>
+    if (col !== sortCol) return <span className="text-muted ml-0.5">↕</span>
+    return <span className="text-teal ml-0.5">{sortDir === 'desc' ? '↓' : '↑'}</span>
   }
 
   const sortItems = (items: DossierSoumis[]) =>
@@ -331,20 +335,20 @@ function DossiersSoumisView({ dossiers, loading, onMount, onUpdate }: {
       {/* Cards stats */}
       {!loading && dossiers.length > 0 && (
         <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-8 gap-3">
-          <div className="kpi-card col-span-2 border-l-4 border-l-gray-400">
+          <div className="kpi-card col-span-2 border-l-[3px] border-l-line">
             <p className="kpi-label">CAPEX total soumis</p>
             <p className="kpi-value">{fmtK(capexTotal)}</p>
             <p className="kpi-sub">{dossiers.length} dossiers</p>
           </div>
-          <div className="kpi-card border-l-4 border-l-gray-300">
+          <div className="kpi-card border-l-[3px] border-l-line">
             <p className="kpi-label">Sans % renseigné</p>
-            <p className="kpi-value text-gray-500">{fmtK(capexSansPct)}</p>
+            <p className="kpi-value text-muted">{fmtK(capexSansPct)}</p>
             <p className="kpi-sub">{sansPct.length} dossiers</p>
           </div>
           {statsPct.map(({ pct, items, capex }) => (
-            <div key={pct} className={`kpi-card border-l-4 ${pct === '100%' ? 'border-l-emerald-500' : pct === '75%' || pct === '50%' ? 'border-l-orange-400' : 'border-l-red-400'}`}>
+            <div key={pct} className={`kpi-card border-l-[3px] ${pct === '100%' ? 'border-l-brandgreen' : pct === '75%' || pct === '50%' ? 'border-l-semamber' : 'border-l-semred'}`}>
               <p className="kpi-label">{pct}</p>
-              <p className={`kpi-value ${pct === '100%' ? 'text-emerald-600' : pct === '75%' || pct === '50%' ? 'text-orange-500' : 'text-red-500'}`}>{fmtK(capex)}</p>
+              <p className={`kpi-value ${pct === '100%' ? 'text-brandgreen' : pct === '75%' || pct === '50%' ? 'text-semamber' : 'text-semred'}`}>{fmtK(capex)}</p>
               <p className="kpi-sub">{items.length} dossier{items.length > 1 ? 's' : ''}</p>
             </div>
           ))}
@@ -352,17 +356,20 @@ function DossiersSoumisView({ dossiers, loading, onMount, onUpdate }: {
       )}
 
       {/* Barre de filtres */}
-      <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4">
+      <div className="bg-surface rounded-card border border-line shadow-sm p-4">
         <div className="flex items-center gap-4 flex-wrap">
-          <div className="flex-1">
-            <h2 className="font-semibold text-gray-900">📋 Dossiers soumis</h2>
-            <p className="text-xs text-gray-400 mt-0.5">
-              {dossiers.length} dossiers sans contrat signé ni statut · % réussite, mois et statut éditables directement
-            </p>
+          <div className="flex-1 flex items-center gap-2">
+            <IconClipboardList size={18} className="text-muted" />
+            <div>
+              <h2 className="font-bold text-ink">Dossiers soumis</h2>
+              <p className="text-xs text-muted mt-0.5">
+                {dossiers.length} dossiers sans contrat signé ni statut · % réussite, mois et statut éditables directement
+              </p>
+            </div>
           </div>
           <input type="text" placeholder="Rechercher abonné, installateur…" value={search} onChange={e => setSearch(e.target.value)}
-            className="text-sm border border-gray-200 rounded-lg px-3 py-1.5 w-64 focus:outline-none focus:ring-2 focus:ring-blue-300" />
-          <select value={filterCom} onChange={e => setFilter(e.target.value)} className="text-sm border border-gray-200 rounded-lg px-3 py-1.5 bg-white">
+            className="text-sm border border-line rounded-control px-3 py-1.5 w-64 focus:outline-none focus-visible:shadow-focus" />
+          <select value={filterCom} onChange={e => setFilter(e.target.value)} className="text-sm border border-line rounded-control px-3 py-1.5 bg-surface">
             <option value="">Tous les commerciaux</option>
             {commerciaux.map(c => <option key={c} value={c}>{c}</option>)}
           </select>
@@ -370,16 +377,16 @@ function DossiersSoumisView({ dossiers, loading, onMount, onUpdate }: {
             const next: Record<string, boolean> = {}
             grouped.forEach(g => { next[g.commercial] = !allCollapsed })
             setCollapsed(next)
-          }} className="text-sm px-3 py-1.5 border border-gray-200 rounded-lg hover:bg-gray-50 text-gray-600">
-            {allCollapsed ? '⊞ Tout déplier' : '⊟ Tout replier'}
+          }} className="btn btn-ghost">
+            {allCollapsed ? 'Tout déplier' : 'Tout replier'}
           </button>
-          <button onClick={onMount} className="text-sm px-3 py-1.5 border border-gray-200 rounded-lg hover:bg-gray-50 text-gray-600">↺ Actualiser</button>
+          <button onClick={onMount} className="btn btn-ghost"><IconLoader size={14} /> Actualiser</button>
         </div>
       </div>
 
       {loading && (
         <div className="flex items-center justify-center py-20">
-          <div className="w-8 h-8 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
+          <div className="w-8 h-8 border-2 rounded-full animate-spin" style={{ borderColor: 'var(--teal)', borderTopColor: 'transparent' }} />
         </div>
       )}
 
@@ -390,14 +397,14 @@ function DossiersSoumisView({ dossiers, loading, onMount, onUpdate }: {
         const sortedItems = sortItems(items)
 
         return (
-          <div key={commercial} className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+          <div key={commercial} className="bg-surface rounded-card border border-line shadow-sm overflow-hidden">
             {/* Header cliquable avec répartition % + totaux */}
             <button onClick={() => toggle(commercial)}
-              className="w-full px-5 py-3 border-b border-gray-100 flex items-center gap-3 hover:bg-gray-50 transition-colors text-left">
+              className="w-full px-5 py-3 border-b border-line flex items-center gap-3 hover:bg-canvas transition-colors text-left">
               <Avatar nom={commercial} size={8} />
               <div className="flex-1 min-w-0">
-                <h3 className="font-semibold text-gray-900">{commercial}</h3>
-                <p className="text-xs text-gray-400">{items.length} dossier{items.length > 1 ? 's' : ''}</p>
+                <h3 className="font-semibold text-ink">{commercial}</h3>
+                <p className="text-xs text-muted">{items.length} dossier{items.length > 1 ? 's' : ''}</p>
               </div>
               {/* Badges répartition par % */}
               <div className="hidden lg:flex items-center gap-1.5">
@@ -406,7 +413,7 @@ function DossiersSoumisView({ dossiers, loading, onMount, onUpdate }: {
                   const count = items.filter(d => d.pct_reussite === pct).length
                   if (count === 0) return null
                   return (
-                    <div key={pct} className={`text-center px-2 py-1 rounded-lg ${color}`}
+                    <div key={pct} className={`text-center px-2 py-1 rounded-control ${color}`}
                       title={`${count} dossier${count > 1 ? 's' : ''} à ${label}`}>
                       <p className="text-xs font-semibold leading-none">{label}</p>
                       <p className="text-xs font-bold leading-tight mt-0.5">{fmtK(capex)}</p>
@@ -417,75 +424,75 @@ function DossiersSoumisView({ dossiers, loading, onMount, onUpdate }: {
               {/* Totaux */}
               <div className="flex items-center gap-4 mx-4">
                 <div className="text-right">
-                  <p className="text-xs text-gray-400">CAPEX total</p>
-                  <p className="text-sm font-bold text-gray-800">{fmtK(capexGroupe)}</p>
+                  <p className="text-xs text-muted">CAPEX total</p>
+                  <p className="text-sm font-bold text-ink">{fmtK(capexGroupe)}</p>
                 </div>
                 <div className="text-right">
-                  <p className="text-xs text-gray-400">kWc total</p>
-                  <p className="text-sm font-bold text-gray-800">{kwcGroupe.toFixed(1)}</p>
+                  <p className="text-xs text-muted">kWc total</p>
+                  <p className="text-sm font-bold text-ink">{kwcGroupe.toFixed(1)}</p>
                 </div>
               </div>
-              <span className="text-gray-400 text-lg flex-shrink-0">{isCollapsed ? '▶' : '▼'}</span>
+              <IconChevronDownRotate collapsed={isCollapsed} />
             </button>
 
             {/* Tableau avec tri */}
             {!isCollapsed && (
               <div className="overflow-x-auto">
                 <table className="w-full text-sm">
-                  <thead className="bg-gray-50 border-b border-gray-100">
+                  <thead className="bg-canvas border-b border-line">
                     <tr>
-                      <th className="px-3 py-2 text-left text-xs font-semibold text-gray-500">Abonné / Entreprise</th>
-                      <th className="px-3 py-2 text-left text-xs font-semibold text-gray-500">Segment</th>
-                      <th onClick={() => handleSort('capex')} className="px-3 py-2 text-right text-xs font-semibold text-gray-500 cursor-pointer hover:text-gray-800 select-none whitespace-nowrap">
+                      <th className="px-3 py-2 text-left text-xs font-semibold text-muted">Abonné / Entreprise</th>
+                      <th className="px-3 py-2 text-left text-xs font-semibold text-muted">Segment</th>
+                      <th onClick={() => handleSort('capex')} className="px-3 py-2 text-right text-xs font-semibold text-muted cursor-pointer hover:text-ink select-none whitespace-nowrap">
                         CAPEX {sortIcon('capex')}
                       </th>
-                      <th onClick={() => handleSort('kwc')} className="px-3 py-2 text-right text-xs font-semibold text-gray-500 cursor-pointer hover:text-gray-800 select-none whitespace-nowrap">
+                      <th onClick={() => handleSort('kwc')} className="px-3 py-2 text-right text-xs font-semibold text-muted cursor-pointer hover:text-ink select-none whitespace-nowrap">
                         kWc {sortIcon('kwc')}
                       </th>
-                      <th className="px-3 py-2 text-left text-xs font-semibold text-gray-500">Installateur</th>
-                      <th onClick={() => handleSort('date_creation')} className="px-3 py-2 text-center text-xs font-semibold text-gray-500 cursor-pointer hover:text-gray-800 select-none whitespace-nowrap">
+                      <th className="px-3 py-2 text-left text-xs font-semibold text-muted">Installateur</th>
+                      <th onClick={() => handleSort('date_creation')} className="px-3 py-2 text-center text-xs font-semibold text-muted cursor-pointer hover:text-ink select-none whitespace-nowrap">
                         Créé le {sortIcon('date_creation')}
                       </th>
-                      <th className="px-3 py-2 text-center text-xs font-semibold text-gray-500 bg-amber-50">% Réussite</th>
-                      <th className="px-3 py-2 text-center text-xs font-semibold text-gray-500 bg-blue-50">Mois signature</th>
-                      <th className="px-3 py-2 text-center text-xs font-semibold text-gray-500 bg-red-50">Statut</th>
+                      <th className="px-3 py-2 text-center text-xs font-semibold text-muted bg-semamber-bg">% Réussite</th>
+                      <th className="px-3 py-2 text-center text-xs font-semibold text-muted bg-teal-soft">Mois signature</th>
+                      <th className="px-3 py-2 text-center text-xs font-semibold text-muted bg-line">Statut</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-gray-50">
+                  <tbody className="divide-y divide-line">
                     {sortedItems.map(d => (
-                      <tr key={d.id} className="hover:bg-gray-50 transition-colors">
+                      <tr key={d.id} className="hover:bg-canvas transition-colors">
                         <td className="px-3 py-2.5">
-                          <p className="font-medium text-gray-800 text-sm truncate max-w-[180px]">{d.nom}</p>
-                          {d.entreprise && <p className="text-xs text-gray-400 truncate max-w-[180px]">{d.entreprise}</p>}
+                          <p className="font-medium text-ink text-sm truncate max-w-[180px]">{d.nom}</p>
+                          {d.entreprise && <p className="text-xs text-muted truncate max-w-[180px]">{d.entreprise}</p>}
                         </td>
                         <td className="px-3 py-2.5">
-                          <span className={`text-xs px-1.5 py-0.5 rounded-full font-medium ${d.segment === 'Pro' ? 'bg-blue-100 text-blue-700' : 'bg-amber-100 text-amber-700'}`}>
+                          <span className={`text-xs px-1.5 py-0.5 rounded-full font-medium ${d.segment === 'Pro' ? 'bg-teal-soft text-teal-ink' : 'bg-brandgreen-soft text-brandgreen'}`}>
                             {d.segment || '—'}
                           </span>
                         </td>
-                        <td className="px-3 py-2.5 text-right font-medium text-gray-700 whitespace-nowrap text-xs">{fmtK(d.capex)}</td>
-                        <td className="px-3 py-2.5 text-right text-gray-600 text-xs">{d.kwc > 0 ? d.kwc.toFixed(1) : '—'}</td>
-                        <td className="px-3 py-2.5 text-xs text-gray-600 truncate max-w-[140px]">{d.installateur || '—'}</td>
-                        <td className="px-3 py-2.5 text-center text-xs text-gray-500">{fmtDate(d.date_creation)}</td>
-                        <td className="px-3 py-2.5 text-center bg-amber-50/50">
+                        <td className="px-3 py-2.5 text-right font-medium text-ink whitespace-nowrap text-xs">{fmtK(d.capex)}</td>
+                        <td className="px-3 py-2.5 text-right text-muted text-xs">{d.kwc > 0 ? d.kwc.toFixed(1) : '—'}</td>
+                        <td className="px-3 py-2.5 text-xs text-muted truncate max-w-[140px]">{d.installateur || '—'}</td>
+                        <td className="px-3 py-2.5 text-center text-xs text-muted">{fmtDate(d.date_creation)}</td>
+                        <td className="px-3 py-2.5 text-center bg-semamber-bg/50">
                           <select value={d.pct_reussite} onChange={e => onUpdate(d.id, e.target.value, undefined, undefined)}
-                            className={`text-xs font-semibold px-2 py-1 rounded-lg border-0 cursor-pointer focus:ring-2 focus:ring-amber-300 ${pctBadgeColor(d.pct_reussite)}`}>
+                            className={`text-xs font-semibold px-2 py-1 rounded-control border-0 cursor-pointer focus:ring-2 focus:ring-semamber ${pctBadgeColor(d.pct_reussite)}`}>
                             {PCT_OPTIONS.map(o => <option key={o} value={o}>{o || '—'}</option>)}
                           </select>
                         </td>
-                        <td className="px-3 py-2.5 text-center bg-blue-50/50">
+                        <td className="px-3 py-2.5 text-center bg-teal-soft/50">
                           <select value={d.mois_signature} onChange={e => onUpdate(d.id, undefined, e.target.value, undefined)}
-                            className="text-xs text-blue-700 bg-blue-50 px-2 py-1 rounded-lg border-0 cursor-pointer focus:ring-2 focus:ring-blue-300">
+                            className="text-xs text-teal-ink bg-teal-soft px-2 py-1 rounded-control border-0 cursor-pointer focus:ring-2 focus:ring-teal">
                             {MOIS_OPTIONS.map(o => <option key={o} value={o}>{o || '—'}</option>)}
                           </select>
                         </td>
-                        <td className="px-3 py-2.5 text-center bg-red-50/50">
+                        <td className="px-3 py-2.5 text-center bg-line/50">
                           <select value={d.statut_abonne} onChange={e => onUpdate(d.id, undefined, undefined, e.target.value)}
-                            className={`text-xs font-semibold px-2 py-1 rounded-lg border-0 cursor-pointer focus:ring-2 focus:ring-red-300 ${
-                              d.statut_abonne === 'Annulé'  ? 'text-red-600 bg-red-50' :
-                              d.statut_abonne === 'Refusé'  ? 'text-orange-600 bg-orange-50' :
-                              d.statut_abonne === 'Repris'  ? 'text-emerald-600 bg-emerald-50' :
-                              'text-gray-400 bg-gray-50'
+                            className={`text-xs font-semibold px-2 py-1 rounded-control border-0 cursor-pointer focus:ring-2 focus:ring-semred ${
+                              d.statut_abonne === 'Annulé'  ? 'text-semred bg-semred-bg' :
+                              d.statut_abonne === 'Refusé'  ? 'text-semamber bg-semamber-bg' :
+                              d.statut_abonne === 'Repris'  ? 'text-brandgreen bg-brandgreen-soft' :
+                              'text-muted bg-canvas'
                             }`}>
                             <option value="">—</option>
                             <option value="Annulé">Annulé</option>
@@ -504,11 +511,20 @@ function DossiersSoumisView({ dossiers, loading, onMount, onUpdate }: {
       })}
 
       {!loading && grouped.length === 0 && (
-        <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-12 text-center">
-          <p className="text-gray-400 text-sm">Aucun dossier soumis trouvé</p>
+        <div className="bg-surface rounded-card border border-line shadow-sm p-12 text-center">
+          <p className="text-muted text-sm">Aucun dossier soumis trouvé</p>
         </div>
       )}
     </div>
+  )
+}
+
+function IconChevronDownRotate({ collapsed }: { collapsed: boolean }) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round"
+      className="text-muted flex-shrink-0 transition-transform" style={{ width: 16, height: 16, transform: collapsed ? 'rotate(-90deg)' : 'none' }}>
+      <path d="M6 9l6 6 6-6" />
+    </svg>
   )
 }
 
@@ -524,81 +540,81 @@ function PipelinePanel({ pipe, onClose, onUpdate }: {
   return (
     <div className="fixed inset-0 z-30 flex">
       <div className="flex-1 bg-black/20 backdrop-blur-sm" onClick={onClose} />
-      <div className="w-full max-w-4xl bg-white shadow-2xl flex flex-col overflow-hidden">
-        <div className="bg-gradient-to-r from-indigo-600 to-indigo-700 p-5 text-white">
+      <div className="w-full max-w-4xl bg-surface shadow-2xl flex flex-col overflow-hidden">
+        <div className="p-5 text-white" style={{ background: 'var(--teal-deep)' }}>
           <div className="flex items-center justify-between mb-4">
-            <div className="flex items-center gap-3"><Avatar nom={pipe.nom} size={12} /><div><h2 className="text-xl font-bold">{pipe.nom}</h2><p className="text-indigo-200 text-sm">Pipeline 30 jours glissants</p></div></div>
-            <button onClick={onClose} className="text-white/60 hover:text-white text-2xl">✕</button>
+            <div className="flex items-center gap-3"><Avatar nom={pipe.nom} size={12} /><div><h2 className="text-xl font-bold">{pipe.nom}</h2><p className="text-white/70 text-sm">Pipeline 30 jours glissants</p></div></div>
+            <button onClick={onClose} className="text-white/60 hover:text-white"><IconX size={22} /></button>
           </div>
           <div className="grid grid-cols-4 gap-2">
             {[{ label: 'À signer', value: String(pipe.en_cours_pipe) }, { label: 'CAPEX restant', value: fmtK(pipe.capex_en_cours) }, { label: 'Taux conv.', value: `${pipe.taux_conversion}%` }, { label: 'Délai moy.', value: pipe.delai_moy > 0 ? `${pipe.delai_moy}j` : '—' }].map(({ label, value }) => (
-              <div key={label} className="bg-white/10 rounded-lg p-2 text-center"><p className="text-white/60 text-xs">{label}</p><p className="text-white font-bold text-lg">{value}</p></div>
+              <div key={label} className="bg-white/10 rounded-control p-2 text-center"><p className="text-white/60 text-xs">{label}</p><p className="text-white font-bold text-lg">{value}</p></div>
             ))}
           </div>
         </div>
-        <div className="px-5 py-3 bg-indigo-50 border-b border-indigo-100">
-          <div className="flex items-center justify-between text-xs text-indigo-700 mb-1">
+        <div className="px-5 py-3 bg-teal-soft border-b border-line">
+          <div className="flex items-center justify-between text-xs text-teal-ink mb-1">
             <span>{pipe.signes_pipe} signés sur {pipe.total_pipe} dossiers</span>
-            <span className="font-semibold text-orange-600">{fmtK(pipe.capex_en_cours)} restant à signer</span>
+            <span className="font-semibold text-semamber">{fmtK(pipe.capex_en_cours)} restant à signer</span>
           </div>
-          <div className="h-2 bg-indigo-200 rounded-full"><div className="h-2 bg-indigo-500 rounded-full" style={{ width: `${pipe.total_pipe ? Math.round(pipe.signes_pipe / pipe.total_pipe * 100) : 0}%` }} /></div>
+          <div className="h-2 bg-line rounded-full"><div className="h-2 rounded-full" style={{ width: `${pipe.total_pipe ? Math.round(pipe.signes_pipe / pipe.total_pipe * 100) : 0}%`, background: 'var(--teal)' }} /></div>
         </div>
-        <div className="flex border-b border-gray-100">
+        <div className="flex border-b border-line">
           {([['en_cours', `À signer (${pipe.en_cours_pipe})`], ['tous', `Tous (${pipe.items.length})`], ['signes', `Signés (${pipe.signes_pipe})`]] as [string, string][]).map(([id, label]) => (
-            <button key={id} onClick={() => setTab(id as 'tous' | 'signes' | 'en_cours')} className={`px-4 py-2.5 text-sm border-b-2 transition-colors ${tab === id ? 'border-indigo-500 text-indigo-600 font-medium' : 'border-transparent text-gray-500 hover:text-gray-700'}`}>{label}</button>
+            <button key={id} onClick={() => setTab(id as 'tous' | 'signes' | 'en_cours')} className={`tab-underline ${tab === id ? 'active' : ''}`}>{label}</button>
           ))}
         </div>
         {editable && (
-          <p className="px-5 py-2 text-xs text-gray-400 bg-gray-50 border-b border-gray-100">
+          <p className="px-5 py-2 text-xs text-muted bg-canvas border-b border-line">
             % réussite, mois de signature et statut éditables directement pour les dossiers vraiment en cours (sans statut renseigné)
           </p>
         )}
         <div className="flex-1 overflow-y-auto">
           <table className="w-full text-sm">
-            <thead className="bg-gray-50 border-b border-gray-100 sticky top-0">
+            <thead className="bg-canvas border-b border-line sticky top-0">
               <tr>
-                <th className="px-3 py-2 text-left text-xs font-semibold text-gray-500">Abonné</th>
-                <th className="px-3 py-2 text-left text-xs font-semibold text-gray-500">Installateur</th>
-                <th className="px-3 py-2 text-right text-xs font-semibold text-gray-500">CAPEX</th>
-                <th className="px-3 py-2 text-center text-xs font-semibold text-gray-500">Création</th>
-                <th className="px-3 py-2 text-center text-xs font-semibold text-gray-500">Édition</th>
+                <th className="px-3 py-2 text-left text-xs font-semibold text-muted">Abonné</th>
+                <th className="px-3 py-2 text-left text-xs font-semibold text-muted">Installateur</th>
+                <th className="px-3 py-2 text-right text-xs font-semibold text-muted">CAPEX</th>
+                <th className="px-3 py-2 text-center text-xs font-semibold text-muted">Création</th>
+                <th className="px-3 py-2 text-center text-xs font-semibold text-muted">Édition</th>
                 {editable ? (
                   <>
-                    <th className="px-3 py-2 text-center text-xs font-semibold text-gray-500 bg-amber-50">% Réussite</th>
-                    <th className="px-3 py-2 text-center text-xs font-semibold text-gray-500 bg-blue-50">Mois signature</th>
-                    <th className="px-3 py-2 text-center text-xs font-semibold text-gray-500 bg-red-50">Statut</th>
+                    <th className="px-3 py-2 text-center text-xs font-semibold text-muted bg-semamber-bg">% Réussite</th>
+                    <th className="px-3 py-2 text-center text-xs font-semibold text-muted bg-teal-soft">Mois signature</th>
+                    <th className="px-3 py-2 text-center text-xs font-semibold text-muted bg-line">Statut</th>
                   </>
                 ) : (
-                  <th className="px-3 py-2 text-center text-xs font-semibold text-gray-500">Statut</th>
+                  <th className="px-3 py-2 text-center text-xs font-semibold text-muted">Statut</th>
                 )}
-                <th className="px-3 py-2 text-center text-xs font-semibold text-gray-500">Délai</th>
+                <th className="px-3 py-2 text-center text-xs font-semibold text-muted">Délai</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-gray-50">
+            <tbody className="divide-y divide-line">
               {items.map(item => (
-                <tr key={item.id} className="hover:bg-gray-50">
-                  <td className="px-3 py-2.5"><p className="font-medium text-gray-800 text-sm truncate max-w-[140px]">{item.nom_abonne}</p><p className="text-xs text-gray-400">{item.segment}</p></td>
-                  <td className="px-3 py-2.5"><p className="text-xs text-gray-600 truncate max-w-[120px]">{item.installateur}</p></td>
-                  <td className="px-3 py-2.5 text-right font-medium text-gray-700 whitespace-nowrap">{fmtK(item.capex)}</td>
-                  <td className="px-3 py-2.5 text-center text-xs text-gray-500">{fmtDate(item.date_creation)}</td>
-                  <td className="px-3 py-2.5 text-center text-xs text-gray-500">{fmtDate(item.date_edition)}</td>
+                <tr key={item.id} className="hover:bg-canvas">
+                  <td className="px-3 py-2.5"><p className="font-medium text-ink text-sm truncate max-w-[140px]">{item.nom_abonne}</p><p className="text-xs text-muted">{item.segment}</p></td>
+                  <td className="px-3 py-2.5"><p className="text-xs text-muted truncate max-w-[120px]">{item.installateur}</p></td>
+                  <td className="px-3 py-2.5 text-right font-medium text-ink whitespace-nowrap">{fmtK(item.capex)}</td>
+                  <td className="px-3 py-2.5 text-center text-xs text-muted">{fmtDate(item.date_creation)}</td>
+                  <td className="px-3 py-2.5 text-center text-xs text-muted">{fmtDate(item.date_edition)}</td>
                   {editable && item.statut === '' ? (
                     <>
-                      <td className="px-3 py-2.5 text-center bg-amber-50/50">
+                      <td className="px-3 py-2.5 text-center bg-semamber-bg/50">
                         <select value={item.pct_reussite} onChange={e => onUpdate(item.id, e.target.value, undefined, undefined)}
-                          className={`text-xs font-semibold px-2 py-1 rounded-lg border-0 cursor-pointer focus:ring-2 focus:ring-amber-300 ${pctBadgeColor(item.pct_reussite)}`}>
+                          className={`text-xs font-semibold px-2 py-1 rounded-control border-0 cursor-pointer focus:ring-2 focus:ring-semamber ${pctBadgeColor(item.pct_reussite)}`}>
                           {PCT_OPTIONS.map(o => <option key={o} value={o}>{o || '—'}</option>)}
                         </select>
                       </td>
-                      <td className="px-3 py-2.5 text-center bg-blue-50/50">
+                      <td className="px-3 py-2.5 text-center bg-teal-soft/50">
                         <select value={item.mois_signature} onChange={e => onUpdate(item.id, undefined, e.target.value, undefined)}
-                          className="text-xs text-blue-700 bg-blue-50 px-2 py-1 rounded-lg border-0 cursor-pointer focus:ring-2 focus:ring-blue-300">
+                          className="text-xs text-teal-ink bg-teal-soft px-2 py-1 rounded-control border-0 cursor-pointer focus:ring-2 focus:ring-teal">
                           {MOIS_OPTIONS.map(o => <option key={o} value={o}>{o || '—'}</option>)}
                         </select>
                       </td>
-                      <td className="px-3 py-2.5 text-center bg-red-50/50">
+                      <td className="px-3 py-2.5 text-center bg-line/50">
                         <select value={item.statut} onChange={e => onUpdate(item.id, undefined, undefined, e.target.value)}
-                          className="text-xs font-semibold px-2 py-1 rounded-lg border-0 cursor-pointer focus:ring-2 focus:ring-red-300 text-gray-400 bg-gray-50">
+                          className="text-xs font-semibold px-2 py-1 rounded-control border-0 cursor-pointer focus:ring-2 focus:ring-semred text-muted bg-canvas">
                           <option value="">—</option>
                           <option value="Annulé">Annulé</option>
                           <option value="Repris">Repris</option>
@@ -609,18 +625,18 @@ function PipelinePanel({ pipe, onClose, onUpdate }: {
                   ) : editable ? (
                     <td colSpan={3} className="px-3 py-2.5 text-center">
                       <span className={`text-xs px-1.5 py-0.5 rounded-full font-medium ${
-                        item.statut === 'Annulé' ? 'text-red-600 bg-red-50' :
-                        item.statut === 'Refusé' ? 'text-orange-600 bg-orange-50' :
-                        'text-emerald-600 bg-emerald-50'
+                        item.statut === 'Annulé' ? 'text-semred bg-semred-bg' :
+                        item.statut === 'Refusé' ? 'text-semamber bg-semamber-bg' :
+                        'text-brandgreen bg-brandgreen-soft'
                       }`}>{item.statut}</span>
                     </td>
                   ) : (
-                    <td className="px-3 py-2.5 text-center">{item.signe ? <span className="text-xs bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded-full font-medium">✓ Signé</span> : <span className="text-xs bg-orange-100 text-orange-700 px-1.5 py-0.5 rounded-full font-medium">À signer</span>}</td>
+                    <td className="px-3 py-2.5 text-center">{item.signe ? <span className="text-xs bg-brandgreen-soft text-brandgreen px-1.5 py-0.5 rounded-full font-medium">✓ Signé</span> : <span className="text-xs bg-semamber-bg text-semamber px-1.5 py-0.5 rounded-full font-medium">À signer</span>}</td>
                   )}
-                  <td className="px-3 py-2.5 text-center text-xs text-gray-500">{item.delai_creation_signature >= 0 ? `${item.delai_creation_signature}j` : '—'}</td>
+                  <td className="px-3 py-2.5 text-center text-xs text-muted">{item.delai_creation_signature >= 0 ? `${item.delai_creation_signature}j` : '—'}</td>
                 </tr>
               ))}
-              {items.length === 0 && <tr><td colSpan={editable ? 9 : 7} className="px-3 py-8 text-center text-gray-400 text-sm">Aucun dossier</td></tr>}
+              {items.length === 0 && <tr><td colSpan={editable ? 9 : 7} className="px-3 py-8 text-center text-muted text-sm">Aucun dossier</td></tr>}
             </tbody>
           </table>
         </div>
@@ -645,51 +661,51 @@ function ComPanel({ com, months, onClose }: { com: ComRow; months: string[]; onC
   return (
     <div className="fixed inset-0 z-30 flex">
       <div className="flex-1 bg-black/20 backdrop-blur-sm" onClick={onClose} />
-      <div className="w-full max-w-3xl bg-white shadow-2xl flex flex-col overflow-hidden">
-        <div className="bg-gradient-to-r from-blue-600 to-blue-700 p-5 text-white">
+      <div className="w-full max-w-3xl bg-surface shadow-2xl flex flex-col overflow-hidden">
+        <div className="p-5 text-white" style={{ background: 'var(--teal-deep)' }}>
           <div className="flex items-center justify-between mb-3">
             <div className="flex items-center gap-3">
               <Avatar nom={com.nom} size={12} />
               <div>
                 <h2 className="text-xl font-bold">{com.nom}</h2>
                 <div className="flex items-center gap-2 mt-0.5">
-                  <p className="text-blue-200 text-sm">{com.installateurs.length} installateurs</p>
-                  {selMonth && <span className="flex items-center gap-1 bg-white/20 text-white text-xs px-2 py-0.5 rounded-full">📅 {mLabel}<button onClick={() => { setSelMonth(null); setSel(null) }} className="ml-1 hover:text-red-300">✕</button></span>}
+                  <p className="text-white/70 text-sm">{com.installateurs.length} installateurs</p>
+                  {selMonth && <span className="flex items-center gap-1 bg-white/20 text-white text-xs px-2 py-0.5 rounded-full">{mLabel}<button onClick={() => { setSelMonth(null); setSel(null) }} className="ml-1 hover:text-white"><IconX size={11} /></button></span>}
                 </div>
               </div>
             </div>
-            <button onClick={onClose} className="text-white/60 hover:text-white text-2xl">✕</button>
+            <button onClick={onClose} className="text-white/60 hover:text-white"><IconX size={22} /></button>
           </div>
           <div className="grid grid-cols-5 gap-2">
             {selMonth
-              ? [{ label: `Signés ${mLabel}`, value: String(monthData?.signes || 0) }, { label: 'Annulés', value: String(monthData?.annules || 0) }, { label: 'CAPEX', value: fmtK(monthData?.capex || 0) }, { label: 'kWc', value: String(Math.round(monthData?.kwc || 0)) }, { label: 'Poses', value: String(monthData?.poses || 0) }].map(({ label, value }) => (<div key={label} className="bg-white/10 rounded-lg p-2 text-center"><p className="text-white/60 text-xs">{label}</p><p className="text-white font-bold text-lg">{value}</p></div>))
-              : [{ label: 'Signés', value: String(com.signes) }, { label: 'CAPEX', value: fmtK(com.capex) }, { label: 'kWc', value: `${Math.round(com.kwc)}` }, { label: 'Taux pose', value: `${com.taux_pose}%` }, { label: 'Délai sig.', value: com.delai_moy_creation_signature > 0 ? `${com.delai_moy_creation_signature}j` : '—' }].map(({ label, value }) => (<div key={label} className="bg-white/10 rounded-lg p-2 text-center"><p className="text-white/60 text-xs">{label}</p><p className="text-white font-bold">{value}</p></div>))}
+              ? [{ label: `Signés ${mLabel}`, value: String(monthData?.signes || 0) }, { label: 'Annulés', value: String(monthData?.annules || 0) }, { label: 'CAPEX', value: fmtK(monthData?.capex || 0) }, { label: 'kWc', value: String(Math.round(monthData?.kwc || 0)) }, { label: 'Poses', value: String(monthData?.poses || 0) }].map(({ label, value }) => (<div key={label} className="bg-white/10 rounded-control p-2 text-center"><p className="text-white/60 text-xs">{label}</p><p className="text-white font-bold text-lg">{value}</p></div>))
+              : [{ label: 'Signés', value: String(com.signes) }, { label: 'CAPEX', value: fmtK(com.capex) }, { label: 'kWc', value: `${Math.round(com.kwc)}` }, { label: 'Taux pose', value: `${com.taux_pose}%` }, { label: 'Délai sig.', value: com.delai_moy_creation_signature > 0 ? `${com.delai_moy_creation_signature}j` : '—' }].map(({ label, value }) => (<div key={label} className="bg-white/10 rounded-control p-2 text-center"><p className="text-white/60 text-xs">{label}</p><p className="text-white font-bold">{value}</p></div>))}
           </div>
         </div>
         <div className="flex-1 overflow-y-auto p-4 space-y-4">
-          {!selMonth && (<div><h3 className="text-sm font-semibold text-gray-700 mb-2">Activité mensuelle</h3><BarChart data={com.monthly} months={months} /><div className="flex gap-4 mt-1 text-xs text-gray-400"><span className="flex items-center gap-1"><span className="w-2 h-2 bg-amber-400 rounded-sm inline-block" /> Signés</span><span className="flex items-center gap-1"><span className="w-2 h-2 bg-red-300 rounded-sm inline-block" /> Annulés</span></div></div>)}
+          {!selMonth && (<div><h3 className="text-sm font-semibold text-ink mb-2">Activité mensuelle</h3><BarChart data={com.monthly} months={months} /><div className="flex gap-4 mt-1 text-xs text-muted"><span className="flex items-center gap-1"><span className="w-2 h-2 bg-teal rounded-sm inline-block" /> Signés</span><span className="flex items-center gap-1"><span className="w-2 h-2 bg-semred rounded-sm inline-block" /> Annulés</span></div></div>)}
           <div>
             <div className="flex items-center justify-between mb-2">
-              <h3 className="text-sm font-semibold text-gray-700">Heatmap {selMonth && <span className="text-blue-600 ml-1">· {mLabel} sélectionné</span>}</h3>
-              {selMonth && <button onClick={() => { setSelMonth(null); setSel(null) }} className="text-xs text-gray-400 hover:text-gray-700">Voir tout ×</button>}
+              <h3 className="text-sm font-semibold text-ink">Heatmap {selMonth && <span className="text-teal-ink ml-1">· {mLabel} sélectionné</span>}</h3>
+              {selMonth && <button onClick={() => { setSelMonth(null); setSel(null) }} className="text-xs text-muted hover:text-ink">Voir tout ×</button>}
             </div>
-            <div className="overflow-x-auto"><div className="flex gap-1 min-w-max">{months.map(m => { const d = com.monthly.find(r => r.month === m); const mx = Math.max(...com.monthly.map(r => r.signes), 1); return (<div key={m} className="flex flex-col items-center gap-1"><HeatCell v={d?.signes || 0} max={mx} selected={selMonth === m} onClick={() => { setSelMonth(selMonth === m ? null : m); setSel(null) }} /><span className={`whitespace-nowrap text-center ${selMonth === m ? 'text-blue-600 font-semibold' : 'text-gray-400'}`} style={{ fontSize: 9 }}>{d?.label || m.slice(5)}</span></div>) })}</div></div>
+            <div className="overflow-x-auto"><div className="flex gap-1 min-w-max">{months.map(m => { const d = com.monthly.find(r => r.month === m); const mx = Math.max(...com.monthly.map(r => r.signes), 1); return (<div key={m} className="flex flex-col items-center gap-1"><HeatCell v={d?.signes || 0} max={mx} selected={selMonth === m} onClick={() => { setSelMonth(selMonth === m ? null : m); setSel(null) }} /><span className={`whitespace-nowrap text-center ${selMonth === m ? 'text-teal-ink font-semibold' : 'text-muted'}`} style={{ fontSize: 9 }}>{d?.label || m.slice(5)}</span></div>) })}</div></div>
           </div>
           <div>
-            <h3 className="text-sm font-semibold text-gray-700 mb-2">{selMonth ? `Installateurs actifs en ${mLabel} (${instForMonth.length})` : `Ses installateurs (${com.installateurs.length})`}</h3>
+            <h3 className="text-sm font-semibold text-ink mb-2">{selMonth ? `Installateurs actifs en ${mLabel} (${instForMonth.length})` : `Ses installateurs (${com.installateurs.length})`}</h3>
             {sel ? (
-              <div className="border border-blue-200 rounded-xl overflow-hidden">
-                <div className="bg-blue-50 p-3 flex items-center justify-between">
-                  <div className="flex items-center gap-2"><button onClick={() => setSel(null)} className="text-blue-600 hover:text-blue-800 text-sm">← Retour</button><span className="font-semibold text-gray-800 text-sm truncate max-w-xs">{sel.nom}</span></div>
-                  <div className="flex gap-3 text-sm"><span><span className="font-bold text-amber-600">{selMonth ? (sel.monthly.find(r => r.month === selMonth)?.signes || 0) : sel.signes}</span> signés</span><span className="text-gray-500">{fmtK(selMonth ? (sel.monthly.find(r => r.month === selMonth)?.capex || 0) : sel.capex)}</span></div>
+              <div className="border border-line rounded-card overflow-hidden">
+                <div className="bg-teal-soft p-3 flex items-center justify-between">
+                  <div className="flex items-center gap-2"><button onClick={() => setSel(null)} className="text-teal-ink hover:opacity-80 text-sm flex items-center gap-1"><IconArrowLeft size={13} /> Retour</button><span className="font-semibold text-ink text-sm truncate max-w-xs">{sel.nom}</span></div>
+                  <div className="flex gap-3 text-sm"><span><span className="font-bold text-teal-ink">{selMonth ? (sel.monthly.find(r => r.month === selMonth)?.signes || 0) : sel.signes}</span> signés</span><span className="text-muted">{fmtK(selMonth ? (sel.monthly.find(r => r.month === selMonth)?.capex || 0) : sel.capex)}</span></div>
                 </div>
-                <div className="p-3">{selMonth ? (<div className="text-center py-6 text-gray-400 text-sm"><p className="text-3xl font-bold text-gray-700 mb-1">{sel.monthly.find(r => r.month === selMonth)?.signes || 0}</p><p>contrats signés en {mLabel}</p><p className="text-xs mt-1">{fmtK(sel.monthly.find(r => r.month === selMonth)?.capex || 0)} CAPEX · {(sel.monthly.find(r => r.month === selMonth)?.kwc || 0).toFixed(1)} kWc</p></div>) : <BarChart data={sel.monthly} months={months} />}</div>
+                <div className="p-3">{selMonth ? (<div className="text-center py-6 text-muted text-sm"><p className="text-3xl font-bold text-ink mb-1">{sel.monthly.find(r => r.month === selMonth)?.signes || 0}</p><p>contrats signés en {mLabel}</p><p className="text-xs mt-1">{fmtK(sel.monthly.find(r => r.month === selMonth)?.capex || 0)} CAPEX · {(sel.monthly.find(r => r.month === selMonth)?.kwc || 0).toFixed(1)} kWc</p></div>) : <BarChart data={sel.monthly} months={months} />}</div>
               </div>
             ) : (
               <div className="overflow-x-auto">
                 <table className="w-full text-sm border-collapse">
-                  <thead><tr className="border-b border-gray-200 bg-gray-50">
-                    <th className="px-3 py-2 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">Installateur</th>
+                  <thead><tr className="border-b border-line bg-canvas">
+                    <th className="px-3 py-2 text-left text-xs font-semibold text-muted uppercase tracking-wide">Installateur</th>
                     <Th label="Signés" k="signes" col={instSort.col} dir={instSort.dir} onSort={instSort.toggle} />
                     <Th label="Annulés" k="annules" col={instSort.col} dir={instSort.dir} onSort={instSort.toggle} />
                     <Th label="CAPEX" k="capex" col={instSort.col} dir={instSort.dir} onSort={instSort.toggle} />
@@ -697,22 +713,22 @@ function ComPanel({ com, months, onClose }: { com: ComRow; months: string[]; onC
                     <Th label="Poses" k="poses" col={instSort.col} dir={instSort.dir} onSort={instSort.toggle} />
                     {!selMonth && <><Th label="Taux pose" k="taux_pose" col={instSort.col} dir={instSort.dir} onSort={instSort.toggle} /><Th label="Délai sig." k="delai_moy_creation_signature" col={instSort.col} dir={instSort.dir} onSort={instSort.toggle} /></>}
                   </tr></thead>
-                  <tbody className="divide-y divide-gray-100">
+                  <tbody className="divide-y divide-line">
                     {instForMonth.map((inst, i) => {
                       const max = selMonth ? maxInstMonth : maxInst
                       return (
-                        <tr key={i} onClick={() => setSel(com.installateurs.find(ci => ci.nom === inst.nom) || null)} className="hover:bg-blue-50 cursor-pointer transition-colors align-middle">
-                          <td className="px-3 py-2.5" style={{ maxWidth: 180 }}><p className="text-sm font-medium text-gray-800 truncate">{inst.nom}</p><MiniBar v={inst.signes} max={max} /></td>
-                          <td className="px-3 py-2.5 text-center font-semibold text-gray-800">{inst.signes}</td>
-                          <td className="px-3 py-2.5 text-center"><span className={inst.annules > 0 ? 'text-red-500 font-medium' : 'text-gray-300'}>{inst.annules || '—'}</span></td>
-                          <td className="px-3 py-2.5 text-right text-xs font-medium text-gray-700 whitespace-nowrap">{fmtK(inst.capex)}</td>
-                          <td className="px-3 py-2.5 text-right text-gray-600">{inst.kwc.toFixed(1)}</td>
-                          <td className="px-3 py-2.5 text-center text-gray-700">{inst.poses}</td>
-                          {!selMonth && <><td className="px-3 py-2.5 text-center"><TauxPose v={inst.taux_pose} /></td><td className="px-3 py-2.5 text-center text-gray-500 text-xs">{inst.delai_moy_creation_signature > 0 ? `${inst.delai_moy_creation_signature}j` : '—'}</td></>}
+                        <tr key={i} onClick={() => setSel(com.installateurs.find(ci => ci.nom === inst.nom) || null)} className="hover:bg-teal-soft cursor-pointer transition-colors align-middle">
+                          <td className="px-3 py-2.5" style={{ maxWidth: 180 }}><p className="text-sm font-medium text-ink truncate">{inst.nom}</p><MiniBar v={inst.signes} max={max} /></td>
+                          <td className="px-3 py-2.5 text-center font-semibold text-ink">{inst.signes}</td>
+                          <td className="px-3 py-2.5 text-center"><span className={inst.annules > 0 ? 'text-semred font-medium' : 'text-muted'}>{inst.annules || '—'}</span></td>
+                          <td className="px-3 py-2.5 text-right text-xs font-medium text-ink whitespace-nowrap">{fmtK(inst.capex)}</td>
+                          <td className="px-3 py-2.5 text-right text-muted">{inst.kwc.toFixed(1)}</td>
+                          <td className="px-3 py-2.5 text-center text-ink">{inst.poses}</td>
+                          {!selMonth && <><td className="px-3 py-2.5 text-center"><TauxPose v={inst.taux_pose} /></td><td className="px-3 py-2.5 text-center text-muted text-xs">{inst.delai_moy_creation_signature > 0 ? `${inst.delai_moy_creation_signature}j` : '—'}</td></>}
                         </tr>
                       )
                     })}
-                    {instForMonth.length === 0 && <tr><td colSpan={8} className="px-3 py-8 text-center text-gray-400 text-sm">Aucune activité ce mois</td></tr>}
+                    {instForMonth.length === 0 && <tr><td colSpan={8} className="px-3 py-8 text-center text-muted text-sm">Aucune activité ce mois</td></tr>}
                   </tbody>
                 </table>
               </div>
@@ -824,37 +840,37 @@ export default function CommercialClient() {
   const allMonths = useMemo(() => data?.months.map((m, i) => ({ v: m, l: data.month_labels[i] })) || [], [data])
   const top3 = [...(data?.par_commercial.filter(c => c.nom !== 'Non assigné') || [])].sort((a, b) => b.capex - a.capex).slice(0, 3)
 
-  const views: { id: ViewType; label: string }[] = [
-    { id: 'leaderboard',   label: '🏆 Leaderboard'    },
-    { id: 'pipeline',      label: '🔄 Pipeline 30j'    },
-    { id: 'heatmap',       label: '🗓️ Heatmap'         },
-    { id: 'installateurs', label: '🏗️ Installateurs'   },
-    { id: 'dossiers',      label: '📋 Dossiers soumis'  },
-    ...(role === 'admin' ? [{ id: 'objectifs' as ViewType, label: '🎯 Objectifs' }] : []),
+  const views: { id: ViewType; label: string; icon: ReactNode }[] = [
+    { id: 'leaderboard',   label: 'Leaderboard',    icon: <IconTrophy size={14} />       },
+    { id: 'pipeline',      label: 'Pipeline 30j',   icon: <IconRefresh size={14} />      },
+    { id: 'heatmap',       label: 'Heatmap',        icon: <IconGrid size={14} />         },
+    { id: 'installateurs', label: 'Installateurs',  icon: <IconHammer size={14} />       },
+    { id: 'dossiers',      label: 'Dossiers soumis', icon: <IconClipboardList size={14} /> },
+    ...(role === 'admin' ? [{ id: 'objectifs' as ViewType, label: 'Objectifs', icon: <IconTarget size={14} /> }] : []),
   ]
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      <header className="bg-white border-b border-gray-200 sticky top-0 z-10">
+    <div className="min-h-screen bg-canvas">
+      <header className="bg-surface border-b border-line sticky top-0 z-10">
         <div className="max-w-screen-2xl mx-auto px-4 py-3 flex items-center gap-3 flex-wrap">
           <div className="flex items-center gap-2 mr-2">
-            <div className="w-7 h-7 bg-blue-600 rounded-lg flex items-center justify-center"><span className="text-white text-sm">👥</span></div>
-            <span className="font-semibold text-gray-900 text-sm">CRM Commercial</span>
+            <div className="w-7 h-7 bg-brand-gradient rounded-control flex items-center justify-center"><IconUsers size={16} className="text-white" /></div>
+            <span className="font-bold text-ink text-sm">CRM Commercial</span>
           </div>
-          <select value={annee} onChange={e => { setAnnee(e.target.value); setMois(''); load(e.target.value, '') }} className="text-sm border border-gray-200 rounded-lg px-3 py-1.5 bg-white">
+          <select value={annee} onChange={e => { setAnnee(e.target.value); setMois(''); load(e.target.value, '') }} className="text-sm border border-line rounded-control px-3 py-1.5 bg-surface">
             <option value="">Toutes années</option>
             <option value="2024">2024</option><option value="2025">2025</option><option value="2026">2026</option>
           </select>
-          <select value={mois} onChange={e => { setMois(e.target.value); setAnnee(''); load('', e.target.value) }} className="text-sm border border-gray-200 rounded-lg px-3 py-1.5 bg-white">
+          <select value={mois} onChange={e => { setMois(e.target.value); setAnnee(''); load('', e.target.value) }} className="text-sm border border-line rounded-control px-3 py-1.5 bg-surface">
             <option value="">Tous les mois</option>
             {allMonths.map(m => <option key={m.v} value={m.v}>{m.l}</option>)}
           </select>
-          <div className="flex bg-gray-100 rounded-lg p-1 gap-1 flex-wrap">
-            {views.map(v => (<button key={v.id} onClick={() => setView(v.id)} className={`px-3 py-1 text-sm rounded-md transition-all ${view === v.id ? 'bg-white shadow-sm text-gray-900 font-medium' : 'text-gray-500 hover:text-gray-700'}`}>{v.label}</button>))}
+          <div className="seg flex-wrap">
+            {views.map(v => (<button key={v.id} onClick={() => setView(v.id)} className={`seg-btn ${view === v.id ? 'active' : ''}`}>{v.icon}{v.label}</button>))}
           </div>
           <div className="flex-1" />
-          {role === 'admin' && <a href="/dashboard" className="text-sm px-3 py-1.5 border border-gray-200 rounded-lg hover:bg-gray-50 text-gray-600">← Production</a>}
-          <button onClick={logout} className="text-sm px-3 py-1.5 text-gray-500 hover:text-gray-700">Déco</button>
+          {role === 'admin' && <a href="/dashboard" className="btn btn-ghost"><IconArrowLeft size={14} /> Production</a>}
+          <button onClick={logout} className="btn text-muted hover:text-ink bg-transparent"><IconLogOut size={14} /> Déco</button>
         </div>
       </header>
 
@@ -866,8 +882,8 @@ export default function CommercialClient() {
           <DossiersSoumisView dossiers={dossiers} loading={dossLoading} onMount={loadDossiers} onUpdate={updateDossier} />
         )}
 
-        {loading && view !== 'dossiers' && <div className="flex items-center justify-center py-32"><div className="text-center"><div className="w-10 h-10 border-2 border-blue-600 border-t-transparent rounded-full animate-spin mx-auto mb-3" /><p className="text-sm text-gray-500">Chargement…</p></div></div>}
-        {error   && view !== 'dossiers' && <div className="bg-red-50 border border-red-200 rounded-xl p-5"><p className="font-semibold text-red-700">{error}</p></div>}
+        {loading && view !== 'dossiers' && <div className="flex items-center justify-center py-32"><div className="text-center"><div className="w-10 h-10 border-2 rounded-full animate-spin mx-auto mb-3" style={{ borderColor: 'var(--teal)', borderTopColor: 'transparent' }} /><p className="text-sm text-muted">Chargement…</p></div></div>}
+        {error   && view !== 'dossiers' && <div className="rounded-card p-5" style={{ background: 'var(--red-bg)', border: '1px solid var(--red-border)' }}><p className="font-semibold" style={{ color: 'var(--red)' }}>{error}</p></div>}
 
         {!loading && !error && data && view !== 'dossiers' && (
           <>
@@ -881,7 +897,7 @@ export default function CommercialClient() {
               ].map(({ label, value, sub, red }) => (
                 <div key={label} className="kpi-card">
                   <p className="kpi-label">{label}</p>
-                  <p className={`kpi-value ${red ? 'text-red-500' : ''}`}>{value}</p>
+                  <p className={`kpi-value ${red ? 'text-semred' : ''}`}>{value}</p>
                   {sub && <p className="kpi-sub">{sub}</p>}
                 </div>
               ))}
@@ -890,49 +906,49 @@ export default function CommercialClient() {
             {view === 'leaderboard' && (
               <div className="space-y-4">
                 {top3.length >= 2 && (
-                  <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
-                    <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wider mb-5">🏆 Top performers — CAPEX HT</h2>
+                  <div className="bg-surface rounded-card border border-line shadow-sm p-6">
+                    <h2 className="kpi-label mb-5 flex items-center gap-1.5"><IconTrophy size={14} /> Top performers — CAPEX HT</h2>
                     <div className="flex items-end justify-center gap-6">
-                      {top3[1] && <div className="flex flex-col items-center gap-2 cursor-pointer" onClick={() => setSelCom(top3[1])}><Avatar nom={top3[1].nom} size={14} /><div className="text-center"><p className="text-xs text-gray-500">{top3[1].nom.split(' ')[0]}</p><p className="font-bold text-xl text-gray-800">{fmtK(top3[1].capex)}</p><p className="text-xs text-gray-400">{top3[1].signes} contrats</p></div><div className="w-20 bg-gray-200 rounded-t-lg flex items-center justify-center text-2xl" style={{ height: 60 }}>🥈</div></div>}
-                      {top3[0] && <div className="flex flex-col items-center gap-2 cursor-pointer" onClick={() => setSelCom(top3[0])}><div className="relative"><Avatar nom={top3[0].nom} size={18} /><span className="absolute -top-2 -right-2 text-xl">👑</span></div><div className="text-center"><p className="text-sm text-gray-600 font-medium">{top3[0].nom.split(' ')[0]}</p><p className="font-bold text-3xl text-gray-900">{fmtK(top3[0].capex)}</p><p className="text-sm text-gray-500">{top3[0].signes} contrats</p></div><div className="w-24 bg-amber-400 rounded-t-lg flex items-center justify-center text-2xl" style={{ height: 80 }}>🥇</div></div>}
-                      {top3[2] && <div className="flex flex-col items-center gap-2 cursor-pointer" onClick={() => setSelCom(top3[2])}><Avatar nom={top3[2].nom} size={12} /><div className="text-center"><p className="text-xs text-gray-500">{top3[2].nom.split(' ')[0]}</p><p className="font-bold text-lg text-gray-800">{fmtK(top3[2].capex)}</p><p className="text-xs text-gray-400">{top3[2].signes} contrats</p></div><div className="w-16 bg-orange-300 rounded-t-lg flex items-center justify-center text-2xl" style={{ height: 45 }}>🥉</div></div>}
+                      {top3[1] && <div className="flex flex-col items-center gap-2 cursor-pointer" onClick={() => setSelCom(top3[1])}><Avatar nom={top3[1].nom} size={14} /><div className="text-center"><p className="text-xs text-muted">{top3[1].nom.split(' ')[0]}</p><p className="font-bold text-xl text-ink">{fmtK(top3[1].capex)}</p><p className="text-xs text-muted">{top3[1].signes} contrats</p></div><div className="w-20 bg-line rounded-t-lg flex items-center justify-center font-bold text-muted" style={{ height: 60 }}>#2</div></div>}
+                      {top3[0] && <div className="flex flex-col items-center gap-2 cursor-pointer" onClick={() => setSelCom(top3[0])}><Avatar nom={top3[0].nom} size={18} /><div className="text-center"><p className="text-sm text-muted font-medium">{top3[0].nom.split(' ')[0]}</p><p className="font-bold text-3xl text-ink">{fmtK(top3[0].capex)}</p><p className="text-sm text-muted">{top3[0].signes} contrats</p></div><div className="w-24 rounded-t-lg flex items-center justify-center text-white gap-1" style={{ height: 80, background: 'var(--teal-deep)' }}><IconTrophy size={16} /> <span className="font-bold">#1</span></div></div>}
+                      {top3[2] && <div className="flex flex-col items-center gap-2 cursor-pointer" onClick={() => setSelCom(top3[2])}><Avatar nom={top3[2].nom} size={12} /><div className="text-center"><p className="text-xs text-muted">{top3[2].nom.split(' ')[0]}</p><p className="font-bold text-lg text-ink">{fmtK(top3[2].capex)}</p><p className="text-xs text-muted">{top3[2].signes} contrats</p></div><div className="w-16 rounded-t-lg flex items-center justify-center font-bold text-teal-ink" style={{ height: 45, background: 'var(--teal-soft)' }}>#3</div></div>}
                     </div>
                   </div>
                 )}
-                <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
-                  <div className="px-5 py-4 border-b border-gray-100 flex items-center justify-between">
-                    <div><h2 className="font-semibold text-gray-900">Classement commerciaux</h2><p className="text-xs text-gray-400 mt-0.5">Trié par CAPEX HT · Cliquez pour voir le détail</p></div>
-                    <span className="text-xs text-gray-400">{data.par_commercial.length} commerciaux</span>
+                <div className="bg-surface rounded-card border border-line shadow-sm overflow-hidden">
+                  <div className="px-5 py-4 border-b border-line flex items-center justify-between">
+                    <div><h2 className="font-bold text-ink">Classement commerciaux</h2><p className="text-xs text-muted mt-0.5">Trié par CAPEX HT · Cliquez pour voir le détail</p></div>
+                    <span className="text-xs text-muted">{data.par_commercial.length} commerciaux</span>
                   </div>
                   <div className="overflow-x-auto">
                     <table className="w-full">
-                      <thead className="bg-gray-50 border-b border-gray-100">
+                      <thead className="bg-canvas border-b border-line">
                         <tr>
-                          <th className="px-4 py-3 text-left text-xs font-semibold text-gray-400 w-10">#</th>
-                          <th className="px-4 py-3 text-left text-xs font-semibold text-gray-400">Commercial</th>
+                          <th className="px-4 py-3 text-left text-xs font-semibold text-muted w-10">#</th>
+                          <th className="px-4 py-3 text-left text-xs font-semibold text-muted">Commercial</th>
                           <Th label="CAPEX HT"   k="capex"                        col={comSort.col} dir={comSort.dir} onSort={comSort.toggle} />
-                          <th className="px-4 py-3 text-center text-xs font-semibold text-gray-400">Tendance</th>
+                          <th className="px-4 py-3 text-center text-xs font-semibold text-muted">Tendance</th>
                           <Th label="Signés"     k="signes"                       col={comSort.col} dir={comSort.dir} onSort={comSort.toggle} />
                           <Th label="Annulés"    k="annules"                      col={comSort.col} dir={comSort.dir} onSort={comSort.toggle} />
                           <Th label="Taux pose"  k="taux_pose"                    col={comSort.col} dir={comSort.dir} onSort={comSort.toggle} />
                           <Th label="Délai sig." k="delai_moy_creation_signature" col={comSort.col} dir={comSort.dir} onSort={comSort.toggle} />
-                          <th className="px-4 py-3 text-center text-xs font-semibold text-gray-400">Sparkline</th>
-                          <th className="px-4 py-3 text-center text-xs font-semibold text-gray-400">Installs.</th>
+                          <th className="px-4 py-3 text-center text-xs font-semibold text-muted">Sparkline</th>
+                          <th className="px-4 py-3 text-center text-xs font-semibold text-muted">Installs.</th>
                         </tr>
                       </thead>
-                      <tbody className="divide-y divide-gray-50">
+                      <tbody className="divide-y divide-line">
                         {(comSort.sorted as unknown as ComRow[]).map((com, i) => (
-                          <tr key={com.nom} onClick={() => setSelCom(com)} className="hover:bg-blue-50 cursor-pointer transition-colors">
+                          <tr key={com.nom} onClick={() => setSelCom(com)} className="hover:bg-teal-soft cursor-pointer transition-colors">
                             <td className="px-4 py-3"><Medal rank={i + 1} /></td>
-                            <td className="px-4 py-3"><div className="flex items-center gap-2.5"><Avatar nom={com.nom} size={8} /><div><p className="font-medium text-gray-900 text-sm">{com.nom}</p><p className="text-xs text-gray-400">{com.abo_moyen > 0 ? `Abo. moy. ${fmtFull(com.abo_moyen)}` : '—'}</p></div></div></td>
-                            <td className="px-4 py-3"><div className="flex-1 h-1.5 bg-gray-100 rounded-full" style={{ minWidth: 60 }}><div className={`h-1.5 rounded-full ${i < 3 ? 'bg-amber-400' : 'bg-blue-400'}`} style={{ width: `${Math.min(Math.round(com.capex / maxCom * 100), 100)}%` }} /></div><p className="text-sm font-semibold text-gray-800 mt-0.5">{fmtK(com.capex)}</p></td>
+                            <td className="px-4 py-3"><div className="flex items-center gap-2.5"><Avatar nom={com.nom} size={8} /><div><p className="font-medium text-ink text-sm">{com.nom}</p><p className="text-xs text-muted">{com.abo_moyen > 0 ? `Abo. moy. ${fmtFull(com.abo_moyen)}` : '—'}</p></div></div></td>
+                            <td className="px-4 py-3"><div className="flex-1 h-1.5 bg-line rounded-full" style={{ minWidth: 60 }}><div className={`h-1.5 rounded-full ${i < 3 ? 'bg-teal' : 'bg-teal/50'}`} style={{ width: `${Math.min(Math.round(com.capex / maxCom * 100), 100)}%` }} /></div><p className="text-sm font-semibold text-ink mt-0.5">{fmtK(com.capex)}</p></td>
                             <td className="px-4 py-3 text-center"><Trend v={com.tendance_signes} /></td>
-                            <td className="px-4 py-3 text-gray-700 text-sm">{com.signes} <span className="text-xs text-gray-400">contrats</span></td>
-                            <td className="px-4 py-3 text-center">{com.annules > 0 ? <span className="text-red-500 font-medium text-sm">{com.annules} <span className="text-red-400 text-xs">({com.taux_annulation}%)</span></span> : <span className="text-gray-300 text-sm">—</span>}</td>
+                            <td className="px-4 py-3 text-ink text-sm">{com.signes} <span className="text-xs text-muted">contrats</span></td>
+                            <td className="px-4 py-3 text-center">{com.annules > 0 ? <span className="text-semred font-medium text-sm">{com.annules} <span className="text-xs opacity-70">({com.taux_annulation}%)</span></span> : <span className="text-muted text-sm">—</span>}</td>
                             <td className="px-4 py-3 text-center"><TauxPose v={com.taux_pose} /></td>
-                            <td className="px-4 py-3 text-center text-sm text-gray-600">{com.delai_moy_creation_signature > 0 ? `${com.delai_moy_creation_signature}j` : '—'}</td>
-                            <td className="px-4 py-3 flex justify-center"><Sparkline data={data.months.map(m => com.monthly.find(r => r.month === m)?.signes || 0)} color={i < 3 ? '#f59e0b' : '#60a5fa'} /></td>
-                            <td className="px-4 py-3 text-center text-sm text-gray-600 font-medium">{com.installateurs.length}</td>
+                            <td className="px-4 py-3 text-center text-sm text-muted">{com.delai_moy_creation_signature > 0 ? `${com.delai_moy_creation_signature}j` : '—'}</td>
+                            <td className="px-4 py-3 flex justify-center"><Sparkline data={data.months.map(m => com.monthly.find(r => r.month === m)?.signes || 0)} color={i < 3 ? '#0EA3B4' : '#7fb9c0'} /></td>
+                            <td className="px-4 py-3 text-center text-sm text-muted font-medium">{com.installateurs.length}</td>
                           </tr>
                         ))}
                       </tbody>
@@ -951,21 +967,21 @@ export default function CommercialClient() {
                     { label: 'Déjà signés',            value: String(data.pipeline_global.signes),        sub: `Taux ${data.pipeline_global.taux_conversion}%`,           accent: false },
                     { label: 'kWc à signer',           value: `${Math.round(data.pipeline_global.kwc_en_cours)} kWc`, sub: `${Math.round(data.pipeline_global.kwc_signe)} kWc signés`, accent: false },
                   ].map(({ label, value, sub, accent }) => (
-                    <div key={label} className={`kpi-card ${accent ? 'border-l-4 border-l-orange-400' : 'border-l-4 border-l-indigo-400'}`}>
-                      <p className="kpi-label">{label}</p><p className={`kpi-value ${accent ? 'text-orange-600' : ''}`}>{value}</p>{sub && <p className="kpi-sub">{sub}</p>}
+                    <div key={label} className={`kpi-card border-l-[3px] ${accent ? 'border-l-semamber' : 'border-l-line'}`}>
+                      <p className="kpi-label">{label}</p><p className={`kpi-value ${accent ? 'text-semamber' : ''}`}>{value}</p>{sub && <p className="kpi-sub">{sub}</p>}
                     </div>
                   ))}
                 </div>
-                <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
-                  <div className="px-5 py-4 border-b border-gray-100"><h2 className="font-semibold text-gray-900">Pipeline 30 jours par commercial</h2><p className="text-xs text-gray-400 mt-0.5">Dossiers édités dans les 30 derniers jours · Cliquez pour voir les dossiers</p></div>
+                <div className="bg-surface rounded-card border border-line shadow-sm overflow-hidden">
+                  <div className="px-5 py-4 border-b border-line"><h2 className="font-bold text-ink">Pipeline 30 jours par commercial</h2><p className="text-xs text-muted mt-0.5">Dossiers édités dans les 30 derniers jours · Cliquez pour voir les dossiers</p></div>
                   <div className="overflow-x-auto">
                     <table className="w-full text-sm">
-                      <thead className="bg-gray-50 border-b border-gray-100">
+                      <thead className="bg-canvas border-b border-line">
                         <tr>
-                          <th className="px-4 py-3 text-left text-xs font-semibold text-gray-400 w-10">#</th>
-                          <th className="px-4 py-3 text-left text-xs font-semibold text-gray-400">Commercial</th>
+                          <th className="px-4 py-3 text-left text-xs font-semibold text-muted w-10">#</th>
+                          <th className="px-4 py-3 text-left text-xs font-semibold text-muted">Commercial</th>
                           <Th label="À signer"       k="en_cours_pipe"   col={pipeSort.col} dir={pipeSort.dir} onSort={pipeSort.toggle} />
-                          <th className="px-4 py-3 text-left text-xs font-semibold text-gray-400">Progression</th>
+                          <th className="px-4 py-3 text-left text-xs font-semibold text-muted">Progression</th>
                           <Th label="CAPEX à signer" k="capex_en_cours"  col={pipeSort.col} dir={pipeSort.dir} onSort={pipeSort.toggle} />
                           <Th label="Signés"         k="signes_pipe"     col={pipeSort.col} dir={pipeSort.dir} onSort={pipeSort.toggle} />
                           <Th label="Taux conv."     k="taux_conversion" col={pipeSort.col} dir={pipeSort.dir} onSort={pipeSort.toggle} />
@@ -974,22 +990,22 @@ export default function CommercialClient() {
                           <Th label="Délai moy."     k="delai_moy"       col={pipeSort.col} dir={pipeSort.dir} onSort={pipeSort.toggle} />
                         </tr>
                       </thead>
-                      <tbody className="divide-y divide-gray-50">
+                      <tbody className="divide-y divide-line">
                         {(pipeSort.sorted as unknown as PipelineRow[]).map((pipe, i) => (
-                          <tr key={pipe.nom} onClick={() => setSelPipeNom(pipe.nom)} className="hover:bg-indigo-50 cursor-pointer transition-colors">
-                            <td className="px-4 py-3 text-gray-400 text-xs">{i + 1}</td>
-                            <td className="px-4 py-3"><div className="flex items-center gap-2"><Avatar nom={pipe.nom} size={8} /><span className="font-medium text-gray-900 text-sm">{pipe.nom}</span></div></td>
-                            <td className="px-4 py-3"><PctBarCount v={pipe.en_cours_pipe} max={maxPipe} color="bg-orange-400" /></td>
-                            <td className="px-4 py-3" style={{ minWidth: 120 }}><div className="h-2 bg-gray-100 rounded-full"><div className="h-2 bg-indigo-500 rounded-full" style={{ width: `${pipe.total_pipe ? Math.round(pipe.signes_pipe / pipe.total_pipe * 100) : 0}%` }} /></div><p className="text-xs text-gray-400 mt-0.5">{pipe.signes_pipe}/{pipe.total_pipe} signés</p></td>
-                            <td className="px-4 py-3 font-bold text-orange-600 whitespace-nowrap">{fmtK(pipe.capex_en_cours)}</td>
-                            <td className="px-4 py-3 font-medium text-emerald-600">{pipe.signes_pipe}</td>
-                            <td className="px-4 py-3"><span className={`font-semibold text-sm ${pipe.taux_conversion >= 70 ? 'text-emerald-600' : pipe.taux_conversion >= 40 ? 'text-amber-600' : 'text-gray-400'}`}>{pipe.taux_conversion}%</span></td>
-                            <td className="px-4 py-3 text-gray-600 whitespace-nowrap">{fmtK(pipe.capex_signe)}</td>
-                            <td className="px-4 py-3 text-gray-600">{pipe.kwc_en_cours.toFixed(1)}</td>
-                            <td className="px-4 py-3 text-gray-500 text-sm">{pipe.delai_moy > 0 ? `${pipe.delai_moy}j` : '—'}</td>
+                          <tr key={pipe.nom} onClick={() => setSelPipeNom(pipe.nom)} className="hover:bg-teal-soft cursor-pointer transition-colors">
+                            <td className="px-4 py-3 text-muted text-xs">{i + 1}</td>
+                            <td className="px-4 py-3"><div className="flex items-center gap-2"><Avatar nom={pipe.nom} size={8} /><span className="font-medium text-ink text-sm">{pipe.nom}</span></div></td>
+                            <td className="px-4 py-3"><PctBarCount v={pipe.en_cours_pipe} max={maxPipe} color="bg-semamber" /></td>
+                            <td className="px-4 py-3" style={{ minWidth: 120 }}><div className="h-2 bg-line rounded-full"><div className="h-2 rounded-full" style={{ width: `${pipe.total_pipe ? Math.round(pipe.signes_pipe / pipe.total_pipe * 100) : 0}%`, background: 'var(--teal)' }} /></div><p className="text-xs text-muted mt-0.5">{pipe.signes_pipe}/{pipe.total_pipe} signés</p></td>
+                            <td className="px-4 py-3 font-bold text-semamber whitespace-nowrap">{fmtK(pipe.capex_en_cours)}</td>
+                            <td className="px-4 py-3 font-medium text-brandgreen">{pipe.signes_pipe}</td>
+                            <td className="px-4 py-3"><span className={`font-semibold text-sm ${pipe.taux_conversion >= 70 ? 'text-brandgreen' : pipe.taux_conversion >= 40 ? 'text-semamber' : 'text-muted'}`}>{pipe.taux_conversion}%</span></td>
+                            <td className="px-4 py-3 text-muted whitespace-nowrap">{fmtK(pipe.capex_signe)}</td>
+                            <td className="px-4 py-3 text-muted">{pipe.kwc_en_cours.toFixed(1)}</td>
+                            <td className="px-4 py-3 text-muted text-sm">{pipe.delai_moy > 0 ? `${pipe.delai_moy}j` : '—'}</td>
                           </tr>
                         ))}
-                        {data.pipeline_par_commercial.length === 0 && <tr><td colSpan={10} className="px-4 py-12 text-center text-gray-400">Aucun dossier dans le pipeline des 30 derniers jours</td></tr>}
+                        {data.pipeline_par_commercial.length === 0 && <tr><td colSpan={10} className="px-4 py-12 text-center text-muted">Aucun dossier dans le pipeline des 30 derniers jours</td></tr>}
                       </tbody>
                     </table>
                   </div>
@@ -998,53 +1014,53 @@ export default function CommercialClient() {
             )}
 
             {view === 'heatmap' && (
-              <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
-                <div className="px-5 py-4 border-b border-gray-100"><h2 className="font-semibold text-gray-900">Heatmap — Contrats signés par commercial et par mois</h2></div>
+              <div className="bg-surface rounded-card border border-line shadow-sm overflow-hidden">
+                <div className="px-5 py-4 border-b border-line"><h2 className="font-bold text-ink">Heatmap — Contrats signés par commercial et par mois</h2></div>
                 <div className="p-4 overflow-x-auto">
                   <table className="w-full text-sm">
                     <thead><tr>
-                      <th className="text-left text-xs font-semibold text-gray-400 pr-4 pb-2 min-w-[140px]">Commercial</th>
-                      {data.months.map((m, i) => <th key={m} className="text-center text-xs text-gray-400 font-medium pb-2 px-0.5 whitespace-nowrap">{data.month_labels[i]}</th>)}
-                      <th className="text-right text-xs font-semibold text-gray-400 pl-4 pb-2">Total</th>
-                      <th className="text-right text-xs font-semibold text-gray-400 pl-3 pb-2">Délai moy.</th>
+                      <th className="text-left text-xs font-semibold text-muted pr-4 pb-2 min-w-[140px]">Commercial</th>
+                      {data.months.map((m, i) => <th key={m} className="text-center text-xs text-muted font-medium pb-2 px-0.5 whitespace-nowrap">{data.month_labels[i]}</th>)}
+                      <th className="text-right text-xs font-semibold text-muted pl-4 pb-2">Total</th>
+                      <th className="text-right text-xs font-semibold text-muted pl-3 pb-2">Délai moy.</th>
                     </tr></thead>
-                    <tbody className="divide-y divide-gray-50">
+                    <tbody className="divide-y divide-line">
                       {data.par_commercial.map(com => (
-                        <tr key={com.nom} className="hover:bg-gray-50">
-                          <td className="pr-4 py-1.5"><div className="flex items-center gap-2 cursor-pointer" onClick={() => setSelCom(com)}><Avatar nom={com.nom} size={6} /><span className="text-sm font-medium text-gray-700 truncate max-w-[100px]">{com.nom}</span></div></td>
+                        <tr key={com.nom} className="hover:bg-canvas">
+                          <td className="pr-4 py-1.5"><div className="flex items-center gap-2 cursor-pointer" onClick={() => setSelCom(com)}><Avatar nom={com.nom} size={6} /><span className="text-sm font-medium text-ink truncate max-w-[100px]">{com.nom}</span></div></td>
                           {data.months.map(m => { const d = com.monthly.find(r => r.month === m); return <td key={m} className="px-0.5 py-1.5"><HeatCell v={d?.signes || 0} max={heatMax} onClick={() => setSelCom(com)} /></td> })}
-                          <td className="pl-4 py-1.5 text-right font-bold text-gray-800">{com.signes}</td>
-                          <td className="pl-3 py-1.5 text-right text-xs text-gray-500">{com.delai_moy_creation_signature > 0 ? `${com.delai_moy_creation_signature}j` : '—'}</td>
+                          <td className="pl-4 py-1.5 text-right font-bold text-ink">{com.signes}</td>
+                          <td className="pl-3 py-1.5 text-right text-xs text-muted">{com.delai_moy_creation_signature > 0 ? `${com.delai_moy_creation_signature}j` : '—'}</td>
                         </tr>
                       ))}
                     </tbody>
-                    <tfoot><tr className="border-t-2 border-gray-200">
-                      <td className="pr-4 pt-2 pb-1 text-xs font-semibold text-gray-500">TOTAL</td>
-                      {data.months.map(m => { const total = data.par_commercial.reduce((s, c) => s + (c.monthly.find(r => r.month === m)?.signes || 0), 0); return <td key={m} className="px-0.5 pt-2 pb-1 text-center"><span className="text-xs font-bold text-gray-600">{total || ''}</span></td> })}
-                      <td className="pl-4 pt-2 pb-1 text-right font-bold text-blue-600">{data.meta.total_signes}</td>
+                    <tfoot><tr className="border-t-2 border-line">
+                      <td className="pr-4 pt-2 pb-1 text-xs font-semibold text-muted">TOTAL</td>
+                      {data.months.map(m => { const total = data.par_commercial.reduce((s, c) => s + (c.monthly.find(r => r.month === m)?.signes || 0), 0); return <td key={m} className="px-0.5 pt-2 pb-1 text-center"><span className="text-xs font-bold text-muted">{total || ''}</span></td> })}
+                      <td className="pl-4 pt-2 pb-1 text-right font-bold text-teal-ink">{data.meta.total_signes}</td>
                       <td />
                     </tr></tfoot>
                   </table>
                 </div>
-                <div className="px-5 pb-4 flex items-center gap-2 text-xs text-gray-400">
+                <div className="px-5 pb-4 flex items-center gap-2 text-xs text-muted">
                   <span>Faible</span>
-                  {['bg-gray-100','bg-amber-100','bg-amber-200','bg-amber-300','bg-amber-400','bg-amber-500'].map((c, i) => <div key={i} className={`w-5 h-4 rounded ${c}`} />)}
+                  {['bg-line','bg-teal/20','bg-teal/40','bg-teal/60','bg-teal/80','bg-teal'].map((c, i) => <div key={i} className={`w-5 h-4 rounded ${c}`} />)}
                   <span>Élevé</span>
                 </div>
               </div>
             )}
 
             {view === 'installateurs' && (
-              <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
-                <div className="px-5 py-4 border-b border-gray-100 flex items-center gap-4">
-                  <div className="flex-1"><h2 className="font-semibold text-gray-900">Tous les installateurs</h2><p className="text-xs text-gray-400 mt-0.5">{filteredInstSorted.length} installateurs</p></div>
-                  <input type="text" placeholder="Rechercher…" value={search} onChange={e => setSearch(e.target.value)} className="text-sm border border-gray-200 rounded-lg px-3 py-1.5 w-56 focus:outline-none focus:ring-2 focus:ring-blue-300" />
+              <div className="bg-surface rounded-card border border-line shadow-sm overflow-hidden">
+                <div className="px-5 py-4 border-b border-line flex items-center gap-4">
+                  <div className="flex-1"><h2 className="font-bold text-ink">Tous les installateurs</h2><p className="text-xs text-muted mt-0.5">{filteredInstSorted.length} installateurs</p></div>
+                  <input type="text" placeholder="Rechercher…" value={search} onChange={e => setSearch(e.target.value)} className="text-sm border border-line rounded-control px-3 py-1.5 w-56 focus:outline-none focus-visible:shadow-focus" />
                 </div>
                 <div className="overflow-x-auto">
                   <table className="w-full text-sm">
-                    <thead className="bg-gray-50 border-b border-gray-100">
+                    <thead className="bg-canvas border-b border-line">
                       <tr>
-                        <th className="px-3 py-2.5 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide w-10">#</th>
+                        <th className="px-3 py-2.5 text-left text-xs font-semibold text-muted uppercase tracking-wide w-10">#</th>
                         <Th label="Installateur"  k="nom"                          col={instSort.col} dir={instSort.dir} onSort={instSort.toggle} />
                         <Th label="Signés"         k="signes"                       col={instSort.col} dir={instSort.dir} onSort={instSort.toggle} />
                         <Th label="Annulés"        k="annules"                      col={instSort.col} dir={instSort.dir} onSort={instSort.toggle} />
@@ -1054,23 +1070,23 @@ export default function CommercialClient() {
                         <Th label="Poses"          k="poses"                        col={instSort.col} dir={instSort.dir} onSort={instSort.toggle} />
                         <Th label="Taux pose"      k="taux_pose"                    col={instSort.col} dir={instSort.dir} onSort={instSort.toggle} />
                         <Th label="Délai sig."     k="delai_moy_creation_signature" col={instSort.col} dir={instSort.dir} onSort={instSort.toggle} />
-                        <th className="px-3 py-2.5 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">Tendance</th>
+                        <th className="px-3 py-2.5 text-left text-xs font-semibold text-muted uppercase tracking-wide">Tendance</th>
                       </tr>
                     </thead>
-                    <tbody className="divide-y divide-gray-50">
+                    <tbody className="divide-y divide-line">
                       {filteredInstSorted.map((inst, i) => (
-                        <tr key={inst.nom} className="hover:bg-amber-50 transition-colors">
-                          <td className="px-3 py-2.5 text-gray-400 text-xs">{i + 1}</td>
-                          <td className="px-3 py-2.5 font-medium text-gray-800 truncate max-w-[200px]">{inst.nom}</td>
-                          <td className="px-3 py-2.5"><PctBarCount v={inst.signes} max={maxInst} color="bg-amber-400" /></td>
-                          <td className="px-3 py-2.5"><span className={`font-medium ${inst.annules > 0 ? 'text-red-500' : 'text-gray-300'}`}>{inst.annules}</span></td>
-                          <td className="px-3 py-2.5"><span className={`text-sm font-medium ${inst.taux_annulation > 20 ? 'text-red-500' : inst.taux_annulation > 10 ? 'text-orange-500' : 'text-gray-400'}`}>{inst.taux_annulation}%</span></td>
-                          <td className="px-3 py-2.5 font-medium text-gray-700 whitespace-nowrap">{fmtK(inst.capex)}</td>
-                          <td className="px-3 py-2.5 text-gray-600">{inst.kwc.toFixed(1)}</td>
-                          <td className="px-3 py-2.5 text-gray-700">{inst.poses}</td>
+                        <tr key={inst.nom} className="hover:bg-teal-soft transition-colors">
+                          <td className="px-3 py-2.5 text-muted text-xs">{i + 1}</td>
+                          <td className="px-3 py-2.5 font-medium text-ink truncate max-w-[200px]">{inst.nom}</td>
+                          <td className="px-3 py-2.5"><PctBarCount v={inst.signes} max={maxInst} color="bg-teal" /></td>
+                          <td className="px-3 py-2.5"><span className={`font-medium ${inst.annules > 0 ? 'text-semred' : 'text-muted'}`}>{inst.annules}</span></td>
+                          <td className="px-3 py-2.5"><span className={`text-sm font-medium ${inst.taux_annulation > 20 ? 'text-semred' : inst.taux_annulation > 10 ? 'text-semamber' : 'text-muted'}`}>{inst.taux_annulation}%</span></td>
+                          <td className="px-3 py-2.5 font-medium text-ink whitespace-nowrap">{fmtK(inst.capex)}</td>
+                          <td className="px-3 py-2.5 text-muted">{inst.kwc.toFixed(1)}</td>
+                          <td className="px-3 py-2.5 text-ink">{inst.poses}</td>
                           <td className="px-3 py-2.5"><TauxPose v={inst.taux_pose} /></td>
-                          <td className="px-3 py-2.5 text-gray-500 text-sm">{inst.delai_moy_creation_signature > 0 ? `${inst.delai_moy_creation_signature}j` : '—'}</td>
-                          <td className="px-3 py-2.5"><Sparkline data={data.months.map(m => inst.monthly.find(r => r.month === m)?.signes || 0)} color="#f59e0b" /></td>
+                          <td className="px-3 py-2.5 text-muted text-sm">{inst.delai_moy_creation_signature > 0 ? `${inst.delai_moy_creation_signature}j` : '—'}</td>
+                          <td className="px-3 py-2.5"><Sparkline data={data.months.map(m => inst.monthly.find(r => r.month === m)?.signes || 0)} color="#0EA3B4" /></td>
                         </tr>
                       ))}
                     </tbody>
