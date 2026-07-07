@@ -1,8 +1,10 @@
+import type { ReactNode } from 'react'
+
 interface Props {
   label:     string
   value:     number
   unit?:     string
-  icon?:     string
+  icon?:     ReactNode
   sub?:      string
   decimals?: number
   currency?: boolean
@@ -24,7 +26,7 @@ export default function KPICard({
     <div className="kpi-card">
       <div className="flex items-start justify-between mb-1">
         <p className="kpi-label">{label}</p>
-        {icon && <span className="text-base">{icon}</span>}
+        {icon && <span className="icon-lg text-muted">{icon}</span>}
       </div>
       <p className="kpi-value">{display}</p>
       {sub && <p className="kpi-sub">{sub}</p>}
