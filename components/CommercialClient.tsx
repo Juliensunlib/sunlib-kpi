@@ -33,7 +33,7 @@ const fmtDate = (s: string) => { if (!s) return '—'; try { return new Date(s).
 
 // ─── Match nom flexible ───────────────────────────────────────────────────────
 function normalize(s: string): string {
-  return s.toLowerCase().normalize('NFD').replace(/\p{Diacritic}/gu, '').replace(/[^a-z0-9\s]/g, '').trim()
+  return s.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9\s]/g, '').trim()
 }
 function matchNom(comNom: string, objNom: string): boolean {
   const a = normalize(comNom).split(/\s+/).filter(w => w.length > 2)
