@@ -9,12 +9,13 @@ type TabId = 'signes' | 'poses' | 'capex_signes' | 'capex_poses' | 'kwc' | 'kwc_
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type MonthRow = Record<string, any>
 
-const PRO_COLOR      = '#3b82f6'  // bleu
-const PART_COLOR     = '#f59e0b'  // amber
-const TOT_COLOR      = '#6366f1'  // indigo (quand filtre actif)
-const MRR_PRO_COLOR  = '#059669'  // emerald-600
-const MRR_PART_COLOR = '#34d399'  // emerald-400
-const MRR_TOT_COLOR  = '#10b981'  // emerald-500
+// Pro = teal, Particulier = vert — même paire de couleurs que le reste du dashboard
+const PRO_COLOR      = '#13A3AC'  // teal-deep
+const PART_COLOR     = '#3CAE68'  // green
+const TOT_COLOR      = '#0EA3B4'  // teal (quand filtre actif)
+const MRR_PRO_COLOR  = '#0B7880'  // teal-ink (MRR = signal fort)
+const MRR_PART_COLOR = '#60B830'  // green-bright
+const MRR_TOT_COLOR  = '#0EA3B4'  // teal
 
 const fmtEur = (v: number) =>
   v >= 1_000_000
@@ -37,20 +38,20 @@ function CustomTooltip({ active, payload, label, metric }: {
     isEur ? fmtEur(v) : isKwc ? `${v.toFixed(1)} kWc` : isF2 ? `${v.toFixed(0)} j` : String(v)
 
   return (
-    <div className="bg-white border border-gray-200 rounded-lg shadow-lg p-3 text-sm">
-      <p className="font-semibold text-gray-700 mb-1.5">{label}</p>
+    <div className="bg-surface border border-line rounded-control shadow-lg p-3 text-sm">
+      <p className="font-semibold text-ink mb-1.5">{label}</p>
       {[...payload].reverse().map((p, i) => (
         <div key={i} className="flex items-center gap-2 mb-0.5">
           <span className="w-2.5 h-2.5 rounded-sm flex-shrink-0" style={{ background: p.fill || p.color }} />
-          <span className="text-gray-600">{p.name} :</span>
-          <span className="font-semibold text-gray-800">{fmt(p.value)}</span>
+          <span className="text-muted">{p.name} :</span>
+          <span className="font-semibold text-ink">{fmt(p.value)}</span>
         </div>
       ))}
       {payload.length > 1 && (
-        <div className="flex items-center gap-2 mt-1 pt-1 border-t border-gray-100">
-          <span className="w-2.5 h-2.5 rounded-sm flex-shrink-0 bg-gray-300" />
-          <span className="text-gray-500">Total :</span>
-          <span className="font-semibold text-gray-700">
+        <div className="flex items-center gap-2 mt-1 pt-1 border-t border-line">
+          <span className="w-2.5 h-2.5 rounded-sm flex-shrink-0 bg-line" />
+          <span className="text-muted">Total :</span>
+          <span className="font-semibold text-ink">
             {fmt(payload.reduce((s, p) => s + (p.value || 0), 0))}
           </span>
         </div>
@@ -120,7 +121,7 @@ function yFormatter(metric: TabId) {
 }
 
 export default function MonthlyChart({ data, metric, showSegments }: Props) {
-  if (!data.length) return <p className="text-center text-gray-400 py-16">Aucune donnée</p>
+  if (!data.length) return <p className="text-center text-muted py-16">Aucune donnée</p>
 
   const cfg = METRIC_CONFIG[metric]
   const isStacked = cfg.stacked && showSegments
@@ -168,7 +169,7 @@ export default function MonthlyChart({ data, metric, showSegments }: Props) {
           {showSegments && (
             <Legend
               formatter={(value) => (
-                <span className="text-xs text-gray-600">{value}</span>
+                <span className="text-xs text-muted">{value}</span>
               )}
             />
           )}
@@ -209,7 +210,7 @@ export default function MonthlyChart({ data, metric, showSegments }: Props) {
       </ResponsiveContainer>
 
       {showSegments && (
-        <div className="flex items-center justify-center gap-6 mt-1 text-xs text-gray-500">
+        <div className="flex items-center justify-center gap-6 mt-1 text-xs text-muted">
           <span className="flex items-center gap-1.5">
             <span className="w-3 h-3 rounded-sm inline-block" style={{ background: proColor }} />
             Pro
