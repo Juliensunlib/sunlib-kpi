@@ -1,6 +1,13 @@
 import type { Metadata } from 'next'
+import { Plus_Jakarta_Sans } from 'next/font/google'
 import Script from 'next/script'
 import './globals.css'
+
+const jakarta = Plus_Jakarta_Sans({
+  subsets: ['latin'],
+  variable: '--font-jakarta',
+  display: 'swap',
+})
 
 export const metadata: Metadata = {
   title: 'SunLib KPIs',
@@ -10,8 +17,8 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="fr">
-      <body className="bg-gray-50 text-gray-900 min-h-screen">
+    <html lang="fr" className={jakarta.variable}>
+      <body className="bg-canvas text-ink min-h-screen font-sans">
         {children}
         <Script id="iframe-resize" strategy="afterInteractive">{`
           (function() {
